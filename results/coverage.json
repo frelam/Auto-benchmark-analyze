@@ -3,11 +3,12 @@
     "benchmark_id": "aime24",
     "primary_cluster": "cluster_0",
     "discrimination_profile": {
-      "f0": 0.651737974340012,
-      "f1": 0.3482620256599878
+      "f0": 0.5252004404196875,
+      "f1": 0.29004624005363144,
+      "f2": 0.1847533195266811
     },
-    "coverage_breadth_score": 0.9325063121208339,
-    "reliability_score": 0.16175478989031966,
+    "coverage_breadth_score": 0.9186223800864671,
+    "reliability_score": 0.16456499114530293,
     "saturated_flag": false,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
@@ -21,11 +22,12 @@
     "benchmark_id": "arc_challenge",
     "primary_cluster": "cluster_1",
     "discrimination_profile": {
-      "f0": 0.29462800781843307,
-      "f1": 0.705371992181567
+      "f0": 0.23753316889843168,
+      "f1": 0.6397487145670515,
+      "f2": 0.1227181165345169
     },
-    "coverage_breadth_score": 0.8746247466371673,
-    "reliability_score": 0.22805889931691864,
+    "coverage_breadth_score": 0.8052435810603092,
+    "reliability_score": 0.22895057982914496,
     "saturated_flag": true,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
@@ -39,11 +41,12 @@
     "benchmark_id": "gpqa",
     "primary_cluster": "cluster_0",
     "discrimination_profile": {
-      "f0": 0.6726790493817225,
-      "f1": 0.3273209506182776
+      "f0": 0.5792751243923794,
+      "f1": 0.30490785182163843,
+      "f2": 0.11581702378598209
     },
-    "coverage_breadth_score": 0.9121657526369177,
-    "reliability_score": 0.18001738303228937,
+    "coverage_breadth_score": 0.8447895013642052,
+    "reliability_score": 0.14590036166315207,
     "saturated_flag": false,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
@@ -57,11 +60,12 @@
     "benchmark_id": "gsm8k",
     "primary_cluster": "cluster_1",
     "discrimination_profile": {
-      "f0": 0.27160785812240634,
-      "f1": 0.7283921418775937
+      "f0": 0.19283621282631014,
+      "f1": 0.5841390375465751,
+      "f2": 0.22302474962711466
     },
-    "coverage_breadth_score": 0.8437623618461167,
-    "reliability_score": 0.21114191806667376,
+    "coverage_breadth_score": 0.8793611689062356,
+    "reliability_score": 0.23025789959910814,
     "saturated_flag": true,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
@@ -75,11 +79,12 @@
     "benchmark_id": "hellaswag",
     "primary_cluster": "cluster_1",
     "discrimination_profile": {
-      "f0": 0.062091107975292534,
-      "f1": 0.9379088920247075
+      "f0": 0.41114699065421356,
+      "f1": 0.5510501360609776,
+      "f2": 0.037802873284808795
     },
-    "coverage_breadth_score": 0.33569050769902087,
-    "reliability_score": 0.14661941536192102,
+    "coverage_breadth_score": 0.7442431916423533,
+    "reliability_score": 0.15054528450739404,
     "saturated_flag": true,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
@@ -93,11 +98,12 @@
     "benchmark_id": "humaneval",
     "primary_cluster": "cluster_1",
     "discrimination_profile": {
-      "f0": 0.42404503156415796,
-      "f1": 0.575954968435842
+      "f0": 0.2949702392185393,
+      "f1": 0.49689677568391805,
+      "f2": 0.20813298509754255
     },
-    "coverage_breadth_score": 0.9832891092631898,
-    "reliability_score": 0.18670103304737737,
+    "coverage_breadth_score": 0.9414792229487887,
+    "reliability_score": 0.21132076161860863,
     "saturated_flag": true,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
@@ -110,11 +116,12 @@
     "benchmark_id": "humaneval_plus",
     "primary_cluster": "cluster_0",
     "discrimination_profile": {
-      "f0": 0.7050775810664679,
-      "f1": 0.2949224189335321
+      "f0": 0.32929655779238654,
+      "f1": 0.14598187536136403,
+      "f2": 0.5247215668462494
     },
-    "coverage_breadth_score": 0.8749952536082805,
-    "reliability_score": 0.09596705126251198,
+    "coverage_breadth_score": 0.8966555568619766,
+    "reliability_score": 0.25075846620650727,
     "saturated_flag": false,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
@@ -127,11 +134,12 @@
     "benchmark_id": "ifeval",
     "primary_cluster": "cluster_0",
     "discrimination_profile": {
-      "f0": 0.7144911132819383,
-      "f1": 0.2855088867180617
+      "f0": 0.4014342501669604,
+      "f1": 0.18548073879122162,
+      "f2": 0.4130850110418179
     },
-    "coverage_breadth_score": 0.862848896720943,
-    "reliability_score": 0.13766964755634095,
+    "coverage_breadth_score": 0.950382259639146,
+    "reliability_score": 0.2096767340935561,
     "saturated_flag": false,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
@@ -144,11 +152,12 @@
     "benchmark_id": "livecodebench",
     "primary_cluster": "cluster_0",
     "discrimination_profile": {
-      "f0": 0.6699971050802404,
-      "f1": 0.33000289491975976
+      "f0": 0.647279050714437,
+      "f1": 0.32854006665294766,
+      "f2": 0.024180882632615405
     },
-    "coverage_breadth_score": 0.9149293304776354,
-    "reliability_score": 0.18985095971723928,
+    "coverage_breadth_score": 0.6710781528831644,
+    "reliability_score": 0.15610937291454782,
     "saturated_flag": false,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
@@ -162,11 +171,12 @@
     "benchmark_id": "math",
     "primary_cluster": "cluster_0",
     "discrimination_profile": {
-      "f0": 0.9781927943727621,
-      "f1": 0.021807205627237994
+      "f0": 0.4734013839682409,
+      "f1": 0.06089807837008422,
+      "f2": 0.46570053766167474
     },
-    "coverage_breadth_score": 0.15147067244357063,
-    "reliability_score": 0.1024009267540416,
+    "coverage_breadth_score": 0.801316154396551,
+    "reliability_score": 0.15499923176868527,
     "saturated_flag": false,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
@@ -180,11 +190,12 @@
     "benchmark_id": "mmlu",
     "primary_cluster": "cluster_1",
     "discrimination_profile": {
-      "f0": 0.3353045981778265,
-      "f1": 0.6646954018221735
+      "f0": 0.27334105244220736,
+      "f1": 0.6065615285172089,
+      "f2": 0.12009741904058362
     },
-    "coverage_breadth_score": 0.9202544974455278,
-    "reliability_score": 0.23443034008560706,
+    "coverage_breadth_score": 0.8304326579362061,
+    "reliability_score": 0.23132468542236664,
     "saturated_flag": false,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
@@ -199,16 +210,55 @@
     "benchmark_id": "mmlu_pro",
     "primary_cluster": "cluster_0",
     "discrimination_profile": {
-      "f0": 0.6628665506305086,
-      "f1": 0.33713344936949136
+      "f0": 0.5301718920378828,
+      "f1": 0.2521314906405835,
+      "f2": 0.21769661732153367
     },
-    "coverage_breadth_score": 0.9220491623760273,
-    "reliability_score": 0.12538763590876081,
+    "coverage_breadth_score": 0.9245503492235616,
+    "reliability_score": 0.12158411049881568,
     "saturated_flag": false,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
       "world_knowledge",
       "reasoning"
+    ],
+    "design_goal_agreement_score": 0.0,
+    "granularity": "aggregate_only"
+  },
+  {
+    "benchmark_id": "swe_bench",
+    "primary_cluster": "cluster_2",
+    "discrimination_profile": {
+      "f0": 0.27029038055938337,
+      "f1": 0.16597369882756832,
+      "f2": 0.5637359206130483
+    },
+    "coverage_breadth_score": 0.8873032870640186,
+    "reliability_score": 0.3800774116004527,
+    "saturated_flag": false,
+    "scoring_method": "rule_verified",
+    "design_goal_tags": [
+      "code",
+      "agentic_tool_use"
+    ],
+    "design_goal_agreement_score": 0.0,
+    "granularity": "aggregate_only"
+  },
+  {
+    "benchmark_id": "tau2_bench",
+    "primary_cluster": "cluster_2",
+    "discrimination_profile": {
+      "f0": 0.28505240444601215,
+      "f1": 0.16453085243909377,
+      "f2": 0.5504167431148942
+    },
+    "coverage_breadth_score": 0.8950642529382599,
+    "reliability_score": 0.3639301091323586,
+    "saturated_flag": false,
+    "scoring_method": "rule_verified",
+    "design_goal_tags": [
+      "agentic_tool_use",
+      "instruction_following"
     ],
     "design_goal_agreement_score": 0.0,
     "granularity": "aggregate_only"
