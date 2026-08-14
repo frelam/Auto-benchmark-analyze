@@ -1,0 +1,24 @@
+# Example run profile — model weights + an LLM-as-advisor.
+# The tool auto-deploys the weights with vLLM, evaluates the portfolio, analyzes
+# the low clusters, and produces recommendations.
+#
+# The *analyst* LLM (below) is a SEPARATE OpenAI-compatible endpoint from the
+# model under evaluation. With llm.model configured, advisor_mode auto -> llm_rules;
+# without it, auto falls back to the deterministic rule-based advisor.
+#
+#   benchmark-diagnosis --config examples/run-full-llm.yaml run
+llm:
+  base_url: http://localhost:8001/v1   # <-- your analyst LLM endpoint
+  model: gpt-4o-mini                   # <-- your analyst model id
+recommendation:
+  advisor_mode: auto                   # auto | llm_rules | rules
+run:
+  mode: full
+  model:
+    name: qwen-2.5-72b
+    arch: dense
+    params: 72
+    source: weights                    # weights -> vLLM auto-deploy
+    weights: Qwen/Qwen2.5-72B-Instruct
+  output:
+    dir: examples/output

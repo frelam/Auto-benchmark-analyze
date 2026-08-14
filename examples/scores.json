@@ -1,0 +1,11 @@
+{
+  "_note": "Example per-benchmark scores (percent) for a small dense model. Only the ids in the representative portfolios (mmlu_pro, math, swe_bench, simpleqa, longbench_v2, ...) feed the cluster analysis; the others are listed to show they are displayed but not clustered.",
+  "mmlu_pro": 50.0,
+  "math": 40.0,
+  "swe_bench": 18.0,
+  "simpleqa": 24.0,
+  "longbench_v2": 38.0,
+  "mmlu": 66.0,
+  "gsm8k": 79.0,
+  "humaneval": 60.0
+}

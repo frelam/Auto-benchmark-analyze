@@ -1,0 +1,18 @@
+# Example run profile — input form #2: reuse an existing inference service.
+# The tool selects the OpenAI-compatible harness path automatically; it does not
+# deploy anything. Set base_url to your service IP (any OpenAI-compatible /v1).
+#
+#   benchmark-diagnosis --config examples/run-endpoint.yaml run
+#
+# Equivalent CLI-arg form:
+#   benchmark-diagnosis run --model qwen-2.5-72b --base-url http://10.0.0.5:8000/v1
+run:
+  mode: full
+  model:
+    name: qwen-2.5-72b
+    arch: dense
+    params: 72
+    source: endpoint
+    base_url: http://10.0.0.5:8000/v1   # <-- your inference service IP
+  output:
+    dir: examples/output

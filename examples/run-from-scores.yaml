@@ -1,0 +1,19 @@
+# Example run profile — the "offline" input form: a JSON scores file.
+# No GPU and no inference endpoint are needed; evaluation is skipped.
+#
+#   benchmark-diagnosis --config examples/run-from-scores.yaml run
+#
+# Or the equivalent CLI-arg form (no config file):
+#   benchmark-diagnosis run --model llama-3-8b --scores examples/scores.json \
+#     --arch dense --params 8 --release-date 2024-04-01
+run:
+  mode: full                  # full = eval + analysis + recommendations
+  model:
+    name: llama-3-8b
+    arch: dense
+    params: 8
+    release_date: "2024-04-01"
+    source: scores            # weights | endpoint | scores
+    scores_file: examples/scores.json
+  output:
+    dir: examples/output      # report.md + metrics.json + figures/ land here

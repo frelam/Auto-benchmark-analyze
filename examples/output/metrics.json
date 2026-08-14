@@ -1,0 +1,156 @@
+{
+  "model": {
+    "model_id": "llama-3-8b",
+    "name": "Llama-3-8B",
+    "arch_type": "dense",
+    "total_params": 8.0,
+    "active_params": 8.0,
+    "release_date": "2024-04-18"
+  },
+  "generated_at": "2026-08-14T09:51:10.645129",
+  "mode": "full",
+  "advisor_mode": "rules",
+  "versions": {
+    "coverage_version": "coverage-20260814095110-f4153a",
+    "portfolio_version": "portfolio-20260814095110-cf874e",
+    "curves_version": "curves-20260814095110-bc3ca1"
+  },
+  "clusters": [
+    {
+      "cluster_id": "cluster_0",
+      "score": 38.66609375785146,
+      "percentile": 0.0,
+      "z_score": -2.750266325477142,
+      "underperforming": true,
+      "benchmarks": [
+        {
+          "benchmark_id": "longbench_v2",
+          "weight": 0.8339027051376603,
+          "score": 38.0
+        },
+        {
+          "benchmark_id": "frontiermath",
+          "weight": 0.11708882640668815,
+          "score": null
+        },
+        {
+          "benchmark_id": "mmlu_pro",
+          "weight": 0.049008468455651516,
+          "score": 50.0
+        }
+      ],
+      "diagnosis": {
+        "sub_capability": "longbench_v2",
+        "failure_modes": {},
+        "quantified_gap": 0.1613863164497905
+      },
+      "recommendations": [
+        {
+          "rule_id": "R-reading-001",
+          "source": "rule_base:R-reading-001",
+          "evidence_strength": "medium",
+          "action": "增加长文档理解、多跳抽取与摘要类样本，配合长上下文训练策略，改善信息 定位与利用。",
+          "validation_experiment": "在小规模子集上做消融：固定其余训练配置，仅应用该改动，对比目标 benchmark 的簇级得分变化（建议 >=1% 且跨 2 个随机种子稳定）。"
+        },
+        {
+          "rule_id": "R-longctx-001",
+          "source": "rule_base:R-longctx-001",
+          "evidence_strength": "medium",
+          "action": "对长上下文任务采用 RoPE 外推 / 位置内插 / 长上下文继续预训练，并构造 长文档信息定位与长链推理样本，改善长输入下的信息利用。",
+          "validation_experiment": "在小规模子集上做消融：固定其余训练配置，仅应用该改动，对比目标 benchmark 的簇级得分变化（建议 >=1% 且跨 2 个随机种子稳定）。"
+        }
+      ]
+    },
+    {
+      "cluster_id": "cluster_1",
+      "score": 24.453508629832477,
+      "percentile": 1.7006573618717964,
+      "z_score": -2.770220144997907,
+      "underperforming": true,
+      "benchmarks": [
+        {
+          "benchmark_id": "simpleqa",
+          "weight": 0.935254801125754,
+          "score": 24.0
+        },
+        {
+          "benchmark_id": "ifeval",
+          "weight": 0.037462764960141705,
+          "score": null
+        },
+        {
+          "benchmark_id": "math",
+          "weight": 0.02728243391410431,
+          "score": 40.0
+        }
+      ],
+      "diagnosis": {
+        "sub_capability": "simpleqa",
+        "failure_modes": {},
+        "quantified_gap": 0.2526167165951114
+      },
+      "recommendations": [
+        {
+          "rule_id": "R-factuality-001",
+          "source": "rule_base:R-factuality-001",
+          "evidence_strength": "high",
+          "action": "提高含证据链、引用溯源、事实核查的语料与 SFT 样本配比，配合\"不确定即声明 不确定\"的拒答 / 反事实样本，抑制幻觉，提升短问答事实准确率。",
+          "validation_experiment": "在小规模子集上做消融：固定其余训练配置，仅应用该改动，对比目标 benchmark 的簇级得分变化（建议 >=1% 且跨 2 个随机种子稳定）。"
+        }
+      ]
+    },
+    {
+      "cluster_id": "cluster_2",
+      "score": 18.0,
+      "percentile": 23.076923076923077,
+      "z_score": -0.8118418121798199,
+      "underperforming": true,
+      "benchmarks": [
+        {
+          "benchmark_id": "swe_bench",
+          "weight": 0.9259543608651996,
+          "score": 18.0
+        },
+        {
+          "benchmark_id": "tau2_bench",
+          "weight": 0.0509389048951525,
+          "score": null
+        },
+        {
+          "benchmark_id": "livecodebench",
+          "weight": 0.02310673423964799,
+          "score": null
+        }
+      ],
+      "diagnosis": {
+        "sub_capability": "swe_bench",
+        "failure_modes": {},
+        "quantified_gap": 0.10673385013930631
+      },
+      "recommendations": [
+        {
+          "rule_id": "R-code-001",
+          "source": "rule_base:R-code-001",
+          "evidence_strength": "high",
+          "action": "提高高质量代码（含单测与执行结果反馈）预训练 / SFT 数据占比，并在 RL 阶段 引入单元测试 / 执行通过率作为 reward，强化\"可运行\"而非\"看着对\"。",
+          "validation_experiment": "在小规模子集上做消融：固定其余训练配置，仅应用该改动，对比目标 benchmark 的簇级得分变化（建议 >=1% 且跨 2 个随机种子稳定）。"
+        }
+      ]
+    }
+  ],
+  "scores": {
+    "mmlu_pro": 50.0,
+    "math": 40.0,
+    "swe_bench": 18.0,
+    "simpleqa": 24.0,
+    "longbench_v2": 38.0,
+    "mmlu": 66.0,
+    "gsm8k": 79.0,
+    "humaneval": 60.0
+  },
+  "figures": [
+    "figures/fig_model_scores.png",
+    "figures/fig_model_clusters.png",
+    "figures/fig_model_gaps.png"
+  ]
+}
