@@ -1,0 +1,47 @@
+# Default configuration for benchmark-diagnosis.
+# Override any value by passing `--config path/to.yaml`; only the keys present in
+# your file are overridden (deep-merged over these defaults).
+
+storage:
+  db_path: data/benchmark_diagnosis.db
+  data_dir: data
+
+# The LLM used for *analysis* (failure-mode classification, synthesis). It is a
+# separate OpenAI-compatible endpoint from the model under evaluation.
+llm:
+  base_url: http://localhost:8000/v1
+  api_key: EMPTY
+  model: null          # required for diagnosis/recommendation; set to your analyst model
+  max_tokens: 2048
+  temperature: 0.0
+  timeout_seconds: 120
+
+evaluation:
+  harness_cmd: lm_eval      # or "python -m lm_eval"
+  num_fewshot: null         # null => use each benchmark's registered default
+  batch_size: auto
+  limit: null               # optional int: cap examples per task (debug only)
+  output_dir: data/eval_runs
+
+serving:
+  engine: vllm             # vllm (sglang planned)
+  host: 0.0.0.0
+  port: 8000
+  tensor_parallel_size: 1
+  gpu_memory_utilization: 0.9
+  max_model_len: null
+  extra_args: []           # extra raw CLI flags appended verbatim
+
+# Expectation-curve judgment thresholds (section 4.2.4).
+curves:
+  percentile_threshold: 25      # below p25 => "under-performing"
+  z_threshold: -1.0
+  min_arch_points: 5            # fall back to unified curve below this many points
+
+diagnosis:
+  sample_size: 50              # failed cases sampled per low sub-capability
+  taxonomy_path: null          # null => packaged taxonomy
+
+recommendation:
+  retrieval_enabled: false     # external paper/report RAG (off by default)
+  max_external_sources: 5

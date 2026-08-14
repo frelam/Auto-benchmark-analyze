@@ -1,0 +1,190 @@
+# Experience rule base (design doc section 6.1). Baseline suggestions are pulled
+# from here before any free-form LLM generation.
+#
+# source_type: internal_validated | external_paper | community
+# evidence_strength: high | medium | low
+# applicable_tags: failure-mode ids and/or capability ids from taxonomy.yaml.
+# category: one of training_levers in taxonomy.yaml.
+
+rules:
+  - rule_id: R-data-001
+    title: 针对知识缺口补充目标领域的高质量预训练 / 领域 SFT 数据
+    applicable_tags: [knowledge_gap]
+    category: data_mix
+    description: >-
+      定位到具体知识缺口后，定向补充该领域的高质量、去重、格式一致的预训练语料，
+      或构造覆盖该领域的 SFT 样本；优先提升数据的多样性与事实准确性而非单纯堆量。
+    source_type: internal_validated
+    evidence_strength: high
+
+  - rule_id: R-data-002
+    title: 增加目标能力维度的训练数据占比并重平衡数据配比
+    applicable_tags: [hallucination, context_ignoring]
+    category: data_mix
+    description: >-
+      提高含事实核查、长上下文利用、引用溯源等样本的配比；对"编造"类失败加入
+      反事实 / 拒答样本，降低模型在不确定时强行生成的倾向。
+    source_type: internal_validated
+    evidence_strength: high
+
+  - rule_id: R-reward-001
+    title: 为推理过程引入过程监督 / 验证器 reward
+    applicable_tags: [reasoning_error, calculation_error]
+    category: reward_design
+    description: >-
+      对数学 / 推理任务引入过程奖励模型（PRM）或可执行验证器（代码执行、符号验证），
+      用"过程对错"而非仅"最终答案对错"作 reward，缓解多步推理链中的中间步骤错误。
+    source_type: external_paper
+    evidence_strength: medium
+
+  - rule_id: R-reward-002
+    title: 加入格式约束 reward 并做一致性校验
+    applicable_tags: [format_violation]
+    category: reward_design
+    description: >-
+      在 RL 阶段对输出格式（JSON schema / 代码块 / 选项字母）做规则化 reward，
+      并在 SFT 阶段加入格式校验过滤，直接惩罚格式不合规的生成。
+    source_type: internal_validated
+    evidence_strength: high
+
+  - rule_id: R-reward-003
+    title: 加入长度效率 reward（KL 或显式长度惩罚）
+    applicable_tags: [length_inefficiency]
+    category: reward_design
+    description: >-
+      在 reward 中加入长度惩罚或与参考模型 KL 项，抑制冗余输出；目标是在不损失
+      准确率的前提下降低平均生成长度。
+    source_type: community
+    evidence_strength: low
+
+  - rule_id: R-reward-004
+    title: 用拒绝采样 / DPO 对齐"应拒答 vs 应回答"边界
+    applicable_tags: [over_refusal]
+    category: reward_design
+    description: >-
+      构造"可回答却被拒答"与"应拒答"的成对样本，用 DPO / 拒绝采样校正拒答边界，
+      避免过度安全对齐导致的过度拒答。
+    source_type: internal_validated
+    evidence_strength: medium
+
+  - rule_id: R-curriculum-001
+    title: 对低分能力维度引入课程学习（由易到难）
+    applicable_tags: [reasoning_error, calculation_error]
+    category: curriculum
+    description: >-
+      在 RL / SFT 阶段按难度（题目长度、步骤数、成功率）排序训练样本，由易到难
+      递进，帮助模型在低分维度上稳定爬升，避免直接上高难度样本导致崩溃。
+    source_type: external_paper
+    evidence_strength: medium
+
+  - rule_id: R-sft-001
+    title: 针对格式与指令遵从构造指令模板 SFT 数据
+    applicable_tags: [format_violation, instruction_misunderstanding]
+    category: sft_construction
+    description: >-
+      用多样化的指令模板与约束描述构造 SFT 样本，覆盖真实使用中的指令表达变体，
+      提升指令意图理解与输出格式遵从。
+    source_type: internal_validated
+    evidence_strength: high
+
+  - rule_id: R-sft-002
+    title: 针对工具调用构造 function-calling / agent 轨迹 SFT 数据
+    applicable_tags: [tool_use_error, context_ignoring]
+    category: sft_construction
+    description: >-
+      构造多轮工具调用轨迹样本（含错误调用与纠正），训练模型在收到工具返回后
+      正确解析并利用信息，降低参数错误与信息忽略。
+    source_type: internal_validated
+    evidence_strength: medium
+
+  - rule_id: R-sft-003
+    title: 加入"不确定即声明不确定"的 SFT 样本抑制幻觉
+    applicable_tags: [hallucination]
+    category: sft_construction
+    description: >-
+      训练模型在缺乏依据时输出"不确定/需要更多信息"而非编造，配合引用溯源格式，
+      降低事实性幻觉。
+    source_type: external_paper
+    evidence_strength: medium
+
+  - rule_id: R-algo-001
+    title: 采用长上下文的训练策略 / 位置编码外推
+    applicable_tags: [context_ignoring, premature_termination]
+    category: algorithm
+    description: >-
+      对长上下文任务，采用 RoPE 外推 / 长上下文继续预训练 / 位置内插等技术，
+      改善长输入下的信息利用与输出完整性。
+    source_type: external_paper
+    evidence_strength: medium
+
+  - rule_id: R-algo-002
+    title: 检查解码 / 采样策略（温度、top-p、停止条件）
+    applicable_tags: [premature_termination, length_inefficiency]
+    category: algorithm
+    description: >-
+      过早停止常与 EOS 学习、max_tokens 限制或采样参数有关；先排查推理侧解码配置
+      （温度、top-p、stop tokens、max_tokens）再决定是否改动训练。
+    source_type: community
+    evidence_strength: low
+
+  - rule_id: R-algo-003
+    title: 对多步推理采用多轮自我一致性 / 采样投票
+    applicable_tags: [reasoning_error, calculation_error]
+    category: algorithm
+    description: >-
+      推理侧用 self-consistency（多次采样投票）或按需增加推理预算提升多步推理
+      准确率；若为训练侧瓶颈再升级到过程监督 / 搜索式推理。
+    source_type: external_paper
+    evidence_strength: medium
+
+  # --- 能力维度级规则（聚合级诊断、无 item/失败模式时的基线建议） ---
+
+  - rule_id: R-math-001
+    title: 数学能力短板：增强数学推理训练数据与过程监督
+    applicable_tags: [math, reasoning]
+    category: data_mix
+    description: >-
+      提高高质量数学（含带解题过程的）语料与 SFT 样本占比，并引入过程监督 /
+      可验证器 reward，优先保证多步推理链的中间步骤正确。
+    source_type: internal_validated
+    evidence_strength: high
+
+  - rule_id: R-code-001
+    title: 代码能力短板：增强代码语料与可执行验证
+    applicable_tags: [code]
+    category: data_mix
+    description: >-
+      提高高质量代码（含单测与执行结果反馈）预训练 / SFT 数据占比，并在 RL 阶段
+      引入单元测试 / 执行通过率作为 reward，强化"可运行"而非"看着对"。
+    source_type: internal_validated
+    evidence_strength: high
+
+  - rule_id: R-knowledge-001
+    title: 世界 / 常识知识短板：扩充知识类语料与事实一致性
+    applicable_tags: [world_knowledge, commonsense_knowledge]
+    category: data_mix
+    description: >-
+      定向补充百科、事实性 QA 与常识语料，配合事实一致性过滤与引用溯源训练，
+      降低知识缺失与幻觉。
+    source_type: internal_validated
+    evidence_strength: medium
+
+  - rule_id: R-reading-001
+    title: 阅读理解短板：增加长上下文与信息抽取训练
+    applicable_tags: [reading_comprehension]
+    category: data_mix
+    description: >-
+      增加长文档理解、多跳抽取与摘要类样本，配合长上下文训练策略，改善信息
+      定位与利用。
+    source_type: external_paper
+    evidence_strength: medium
+
+  - rule_id: R-instruction-001
+    title: 指令遵从短板：多样化指令模板 SFT
+    applicable_tags: [instruction_following]
+    category: sft_construction
+    description: >-
+      用多样化指令模板与约束描述构造 SFT 样本，覆盖真实使用中的表达变体，
+      提升意图理解与格式遵从。
+    source_type: internal_validated
+    evidence_strength: medium

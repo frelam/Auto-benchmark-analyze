@@ -1,0 +1,72 @@
+# Fixed failure-mode & capability taxonomy (design doc section 5.2 / 6.1).
+#
+# The LLM-as-analyst and the recommendation synthesizer are constrained to these
+# labels so results aggregate into trends across runs. Rules in rules.yaml must
+# reference only ids defined here; the loader validates this.
+
+capabilities:
+  - math
+  - code
+  - commonsense_knowledge
+  - world_knowledge
+  - reasoning
+  - reading_comprehension
+  - instruction_following
+  - safety
+  - multilingual
+  - agentic_tool_use
+
+# Training levers that a rule can target (rule.category must be one of these).
+training_levers:
+  - data_mix            # 数据配比 / 数据质量
+  - reward_design       # reward 设计
+  - curriculum          # 课程学习
+  - sft_construction    # SFT 数据构造 / 模板
+  - algorithm           # 算法 / 训练策略选择
+  - other
+
+# Failure modes — the vocabulary for classifying failed cases.
+failure_modes:
+  - id: knowledge_gap
+    description: 缺少完成任务所需的事实性 / 程序性知识
+    levers: [data_mix, sft_construction]
+
+  - id: reasoning_error
+    description: 多步推理链条错误（遗漏步骤 / 逻辑跳跃 / 反事实推理）
+    levers: [algorithm, reward_design, data_mix]
+
+  - id: calculation_error
+    description: 数值 / 符号计算错误
+    levers: [reward_design, data_mix, algorithm]
+
+  - id: format_violation
+    description: 输出格式不符合要求（JSON / 代码块 / 选项字母等）
+    levers: [reward_design, sft_construction]
+
+  - id: instruction_misunderstanding
+    description: 误解指令意图或约束条件
+    levers: [sft_construction, data_mix]
+
+  - id: hallucination
+    description: 编造不存在的事实 / 引用 / API / 中间结果
+    levers: [data_mix, reward_design, algorithm]
+
+  - id: context_ignoring
+    description: 忽略或未充分利用上下文 / 工具返回的信息
+    levers: [sft_construction, reward_design, data_mix]
+
+  - id: premature_termination
+    description: 输出不完整、过早停止
+    levers: [reward_design, sft_construction]
+
+  - id: over_refusal
+    description: 应当回答却拒答
+    levers: [sft_construction, reward_design]
+
+  - id: tool_use_error
+    description: 工具 / 函数调用参数错误或调用失败
+    levers: [data_mix, reward_design, sft_construction]
+
+  - id: length_inefficiency
+    description: 输出冗长、效率低（不影响正确性但浪费推理成本）
+    levers: [reward_design]
