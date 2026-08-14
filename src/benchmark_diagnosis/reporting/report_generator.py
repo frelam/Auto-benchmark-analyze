@@ -24,27 +24,29 @@ def render_markdown(report: dict[str, Any]) -> str:
                  f"total_params: {_fmt(model.get('total_params'))} | "
                  f"active_params: {_fmt(model.get('active_params'))}")
     lines.append(f"- **generated_at**: {report.get('generated_at', '?')}")
+    lines.append(f"- **mode**: {report.get('mode', 'full')} | "
+                 f"**advisor**: {report.get('advisor_mode', 'rules')}")
     lines.append(f"- **asset versions**: coverage=`{versions.get('coverage_version')}` "
                  f"portfolio=`{versions.get('portfolio_version')}` "
                  f"curves=`{versions.get('curves_version')}`")
     lines.append("")
 
     clusters = report.get("clusters", [])
-    if not clusters:
+    if clusters:
+        lines.append(f"## Summary — {len(clusters)} capability cluster(s)")
+        lines.append("")
+        lines.append("| cluster | weighted score | percentile | z-score | verdict |")
+        lines.append("|---|---|---|---|---|")
+        for c in clusters:
+            verdict = "⚠️ under-performing" if c.get("underperforming") else "✅ in range"
+            lines.append(
+                f"| `{c['cluster_id']}` | {_fmt(c.get('score'))} | "
+                f"{_fmt(c.get('percentile'), 1)} | {_fmt(c.get('z_score'), 2)} | {verdict} |"
+            )
+        lines.append("")
+    else:
         lines.append("_No cluster results._")
-        return "\n".join(lines)
-
-    lines.append(f"## Summary — {len(clusters)} capability cluster(s)")
-    lines.append("")
-    lines.append("| cluster | weighted score | percentile | z-score | verdict |")
-    lines.append("|---|---|---|---|---|")
-    for c in clusters:
-        verdict = "⚠️ under-performing" if c.get("underperforming") else "✅ in range"
-        lines.append(
-            f"| `{c['cluster_id']}` | {_fmt(c.get('score'))} | "
-            f"{_fmt(c.get('percentile'), 1)} | {_fmt(c.get('z_score'), 2)} | {verdict} |"
-        )
-    lines.append("")
+        lines.append("")
 
     for c in clusters:
         lines.append(f"## Cluster `{c['cluster_id']}`")
@@ -70,7 +72,7 @@ def render_markdown(report: dict[str, Any]) -> str:
                 lines.append("|---|---|")
                 for mode, frac in failure_modes.items():
                     lines.append(f"| `{mode}` | {_fmt(frac, 3)} |")
-                lines.append("")
+        lines.append("")
 
         recs = c.get("recommendations") or []
         if recs:
@@ -86,6 +88,14 @@ def render_markdown(report: dict[str, Any]) -> str:
                 lines.append("")
         lines.append("---")
         lines.append("")
+
+    figures = report.get("figures") or []
+    if figures:
+        lines.append("## Figures")
+        lines.append("")
+        for name in figures:
+            lines.append(f"![{name}]({name})")
+            lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"
 

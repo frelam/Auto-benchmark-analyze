@@ -43,6 +43,9 @@ _C_DENSE = "#0072B2"
 _C_MOE = "#D55E00"
 _C_FRONTIER = "#009E73"
 _C_FIT = "#CC79A7"
+_C_MODEL = "#6BAED6"  # evaluated model's own scores
+_C_OK = "#2CA02C"     # verdict: in expectation range
+_C_BAD = "#D62728"    # verdict: under-performing / gap shortfall
 _CMAP = LinearSegmentedColormap.from_list(
     "bd", ["#f7fbff", "#6baed6", "#08306b"]
 )
@@ -365,3 +368,141 @@ def render_correlation(scores, out_dir: Path) -> list[Path]:
     fig.savefig(path, dpi=_DPI, bbox_inches="tight")
     plt.close(fig)
     return [path]
+
+
+def render_model_scores(
+    raw_scores: dict[str, float],
+    out_dir: Path,
+    portfolio_ids: set[str] | None = None,
+) -> list[Path]:
+    """Horizontal bar chart of the evaluated model's per-benchmark scores.
+
+    Benchmarks in the representative portfolio are drawn in a distinct color so
+    the screened subset stands out from any extra scores the user supplied.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if not raw_scores:
+        return []
+    portfolio_ids = set(portfolio_ids or [])
+
+    items = sorted(raw_scores.items(), key=lambda kv: kv[1])
+    labels = [b for b, _ in items]
+    values = [_score100(v) for _, v in items]
+    colors = [_C_MODEL if b in portfolio_ids else "#BBBBBB" for b, _ in items]
+
+    fig, ax = plt.subplots(figsize=(6.0, 0.5 * max(len(items), 3) + 1.4))
+    bars = ax.barh(labels, values, color=colors, alpha=0.9)
+    for bar, value in zip(bars, values, strict=True):
+        ax.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height() / 2,
+                f"{value:.1f}", va="center", fontsize=7)
+    ax.set_xlabel("Score (0-100)")
+    ax.set_title("Evaluated model — per-benchmark scores")
+    ax.set_xlim(0, max(values) * 1.12 + 4)
+    ax.grid(True, axis="x", alpha=0.25)
+    has_portfolio = any(b in portfolio_ids for b, _ in items)
+    has_extra = any(b not in portfolio_ids for b, _ in items)
+    if has_portfolio and has_extra:
+        from matplotlib.patches import Patch
+
+        ax.legend(
+            handles=[
+                Patch(color=_C_MODEL, label="representative portfolio"),
+                Patch(color="#BBBBBB", label="extra score"),
+            ],
+            frameon=False, fontsize=8, loc="lower right",
+        )
+    fig.tight_layout()
+    path = out_dir / "fig_model_scores.png"
+    fig.savefig(path, dpi=_DPI, bbox_inches="tight")
+    plt.close(fig)
+    return [path]
+
+
+def render_model_clusters(clusters: list[dict], out_dir: Path) -> list[Path]:
+    """Verdict-colored bar chart of weighted cluster scores with p/z labels."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    scored = sorted(
+        (c for c in clusters if c.get("score") is not None),
+        key=lambda c: c["score"],
+    )
+    if not scored:
+        return []
+
+    labels = [c["cluster_id"] for c in scored]
+    values = [_score100(c["score"]) for c in scored]
+    colors = [_C_BAD if c.get("underperforming") else _C_OK for c in scored]
+
+    fig, ax = plt.subplots(figsize=(0.6 + 1.0 * len(scored), 4.6))
+    bars = ax.bar(labels, values, color=colors, alpha=0.9)
+    for bar, cluster in zip(bars, scored, strict=True):
+        tag = f"p{cluster['percentile']:.0f} z{cluster['z_score']:.2f}"
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.6,
+                tag, ha="center", fontsize=8)
+    ax.set_ylabel("Weighted score (0-100)")
+    ax.set_ylim(0, max(values) * 1.18 + 4)
+    ax.set_title("Capability-cluster scores vs expectation (red = under-performing)")
+    ax.grid(True, axis="y", alpha=0.25)
+    fig.tight_layout()
+    path = out_dir / "fig_model_clusters.png"
+    fig.savefig(path, dpi=_DPI, bbox_inches="tight")
+    plt.close(fig)
+    return [path]
+
+
+def render_model_gaps(clusters: list[dict], out_dir: Path) -> list[Path]:
+    """Bar chart of quantified gap (predicted minus actual) per cluster.
+
+    A positive bar means the model lands below its expectation curve on that
+    cluster's benchmarks — i.e. a measurable shortfall worth investigating.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rows = sorted(
+        (
+            (c["cluster_id"], c["diagnosis"]["quantified_gap"])
+            for c in clusters
+            if c.get("diagnosis", {}).get("quantified_gap") is not None
+        ),
+        key=lambda kv: kv[1],
+    )
+    if not rows:
+        return []
+
+    labels = [r[0] for r in rows]
+    gaps = [r[1] * 100.0 for r in rows]  # unit scale -> display as 0-100 pts
+    colors = [_C_BAD if g > 0.0 else _C_OK for g in gaps]
+
+    fig, ax = plt.subplots(figsize=(0.6 + 1.0 * len(rows), 4.4))
+    bars = ax.bar(labels, gaps, color=colors, alpha=0.9)
+    for bar, gap in zip(bars, gaps, strict=True):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.3,
+                f"{gap:.1f}", ha="center", fontsize=8)
+    ax.axhline(0, color="#444444", lw=1)
+    ax.set_ylabel("Quantified gap (predicted − actual, pts)")
+    ax.set_title("Expected minus actual score per cluster (positive = shortfall)")
+    ax.grid(True, axis="y", alpha=0.25)
+    fig.tight_layout()
+    path = out_dir / "fig_model_gaps.png"
+    fig.savefig(path, dpi=_DPI, bbox_inches="tight")
+    plt.close(fig)
+    return [path]
+
+
+def render_model_report(
+    report: dict,
+    raw_scores: dict[str, float],
+    out_dir: Path,
+    portfolio_ids: set[str] | None = None,
+) -> list[Path]:
+    """Render every model-specific figure for an evaluation + analysis run.
+
+    Returns the paths written; an empty list when there is nothing to plot
+    (e.g. no scores / no scored clusters). Callers that want to degrade when
+    matplotlib is not installed should guard the import themselves, since this
+    module refuses to import without it.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    written += render_model_scores(raw_scores, out_dir, portfolio_ids)
+    written += render_model_clusters(report.get("clusters", []), out_dir)
+    written += render_model_gaps(report.get("clusters", []), out_dir)
+    return written

@@ -119,7 +119,7 @@ def ingest_lm_eval_results(
     """
     n = 0
     for task, metrics in results.get("results", {}).items():
-        value = _primary_metric(metrics)
+        value = primary_metric(metrics)
         if value is None:
             continue
         session.add(
@@ -148,7 +148,7 @@ def ingest_lm_eval_results(
     return n
 
 
-def _primary_metric(metrics: dict[str, Any]) -> float | None:
+def primary_metric(metrics: dict[str, Any]) -> float | None:
     """Pick the headline accuracy metric from an lm-eval metrics dict.
 
     Metric keys look like ``"acc,none"`` or ``"exact_match,strict-match"``; we

@@ -113,6 +113,59 @@ def test_cluster_capability_labels() -> None:
     assert set(labels["cluster_0"]) == {"world_knowledge", "reasoning", "math"}
 
 
+def _model_report_clusters() -> list[dict]:
+    return [
+        {
+            "cluster_id": "cluster_0",
+            "score": 45.0,
+            "percentile": 60.0,
+            "z_score": 0.3,
+            "underperforming": False,
+            "diagnosis": {"quantified_gap": -0.02},
+        },
+        {
+            "cluster_id": "cluster_1",
+            "score": 30.0,
+            "percentile": 10.0,
+            "z_score": -1.4,
+            "underperforming": True,
+            "diagnosis": {"quantified_gap": 0.12},
+        },
+    ]
+
+
+def test_render_model_figures_write_png(tmp_path) -> None:
+    pytest.importorskip("matplotlib")
+    from benchmark_diagnosis.reporting import visualize
+
+    scores = {"mmlu_pro": 50.0, "math": 40.0, "swe_bench": 18.0, "gsm8k": 79.0}
+    written = visualize.render_model_scores(scores, tmp_path, portfolio_ids={"math"})
+    assert written and written[0].exists()
+
+    written = visualize.render_model_clusters(_model_report_clusters(), tmp_path)
+    assert written and written[0].exists()
+
+    written = visualize.render_model_gaps(_model_report_clusters(), tmp_path)
+    assert written and written[0].exists()
+
+    report = {"clusters": _model_report_clusters()}
+    written = visualize.render_model_report(report, scores, tmp_path)
+    assert len(written) == 3
+    assert all(p.exists() for p in written)
+
+
+def test_render_model_figures_empty_input_returns_empty(tmp_path) -> None:
+    pytest.importorskip("matplotlib")
+    from benchmark_diagnosis.reporting import visualize
+
+    assert visualize.render_model_scores({}, tmp_path) == []
+    assert visualize.render_model_clusters([], tmp_path) == []
+    assert visualize.render_model_gaps([], tmp_path) == []
+    report = {"clusters": [{"cluster_id": "c", "score": None, "diagnosis": {}}]}
+    assert visualize.render_model_gaps(report["clusters"], tmp_path) == []
+    assert visualize.render_model_report(report, {}, tmp_path) == []
+
+
 def test_render_figures_write_png(tmp_path) -> None:
     pytest.importorskip("matplotlib")
     from benchmark_diagnosis.reporting import visualize

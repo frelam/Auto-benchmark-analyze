@@ -10,6 +10,9 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from typing import Any
+
+from benchmark_diagnosis.data.ingestion import primary_metric
 
 
 def build_command(
@@ -126,6 +129,26 @@ def parse_results(path: str | Path) -> dict:
         return json.loads(p.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return {}
+
+
+def extract_scores(results: dict[str, Any]) -> dict[str, float]:
+    """Flatten a harness ``results`` dict into ``{task: headline_score}``.
+
+    For each task the most stringent available metric wins (``exact_match`` >
+    ``pass@1`` > ``acc`` > ``f1``), matching :func:`ingestion.primary_metric`.
+
+    Args:
+        results: Parsed lm-evaluation-harness results payload (``results`` key).
+
+    Returns:
+        Mapping ``task_id -> score`` for every task with a computable metric.
+    """
+    out: dict[str, float] = {}
+    for task, metrics in (results.get("results") or {}).items():
+        value = primary_metric(metrics)
+        if value is not None:
+            out[task] = value
+    return out
 
 
 def _output_dir_from_cmd(cmd: list[str]) -> Path | None:

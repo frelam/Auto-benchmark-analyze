@@ -11,6 +11,7 @@ import pytest
 from benchmark_diagnosis.evaluation_orchestration import harness_bridge
 from benchmark_diagnosis.evaluation_orchestration.harness_bridge import (
     build_command,
+    extract_scores,
     parse_results,
     run_eval,
 )
@@ -99,6 +100,24 @@ def test_run_eval_no_output_path_returns_empty(monkeypatch):
 
     monkeypatch.setattr(harness_bridge.subprocess, "run", fake_run)
     assert run_eval(cmd) == {}
+
+
+def test_extract_scores_prefers_stricter_metric():
+    results = {
+        "results": {
+            "task_exact": {"acc,none": 0.5, "exact_match,strict-match": 0.42},
+            "task_pass": {"acc,none": 0.6, "pass@1": 0.55},
+            "task_acc": {"acc,none": 0.71},
+            "task_skip": {"bleu,none": 0.3},  # no recognized metric -> dropped
+        }
+    }
+    scores = extract_scores(results)
+    assert scores == {"task_exact": 0.42, "task_pass": 0.55, "task_acc": 0.71}
+
+
+def test_extract_scores_empty_results():
+    assert extract_scores({}) == {}
+    assert extract_scores({"results": {}}) == {}
 
 
 def test_run_eval_failure_raises_runtime_error(monkeypatch):
