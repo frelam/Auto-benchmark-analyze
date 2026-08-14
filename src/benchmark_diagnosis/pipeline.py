@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from benchmark_diagnosis.capability_analysis.coverage_table import build_coverage_table
 from benchmark_diagnosis.capability_analysis.factor_analysis import fit_factor_model
 from benchmark_diagnosis.capability_analysis.mirt_fit import select_dimensions
-from benchmark_diagnosis.config import Settings
+from benchmark_diagnosis.config import Settings, resolve_advisor_mode
 from benchmark_diagnosis.core import db
 from benchmark_diagnosis.core.llm_client import LLMClient
 from benchmark_diagnosis.core.schema import ModelRecord
@@ -165,11 +165,24 @@ def _judge_cluster(
         {"percentile": weighted_pct, "z_score": weighted_z, "underperforming": False},
         config.curves,
     )
+
+    # Quantified gap = how far the model falls short of its expectation curve
+    # (predicted - score, unit scale), aggregated over scored benchmarks whose
+    # residual is computable (skip closed-source models without params curves).
+    gap_judges = [(w, j["residual"]) for w, j in judges if j.get("residual") is not None]
+    quantified_gap = (
+        sum(w * (-residual) for w, residual in gap_judges)
+        / sum(w for w, _ in gap_judges)
+        if gap_judges
+        else None
+    )
+
     return {
         "cluster_id": portfolio.cluster_id,
         "percentile": weighted_pct,
         "z_score": weighted_z,
         "underperforming": under,
+        "quantified_gap": quantified_gap,
         "benchmarks": [
             {
                 "benchmark_id": b["benchmark_id"],
@@ -274,6 +287,8 @@ def diagnose_model(
     config: Settings,
     *,
     cases: list[dict] | None = None,
+    mode: str = "full",
+    advisor_mode: str = "auto",
 ) -> dict[str, Any]:
     """Run the online diagnosis/recommendation chain and return a report dict.
 
@@ -284,10 +299,18 @@ def diagnose_model(
         config: Settings.
         cases: Optional failed-case samples ({question, model_output, gold}) for
             LLM-as-analyst classification. When None, failure modes are empty.
+        mode: ``"full"`` (analysis + recommendations) or ``"analyze"``
+            (analysis only; recommendations are omitted).
+        advisor_mode: Requested advisor mode (``auto``/``llm_rules``/``rules``),
+            resolved against ``config`` via :func:`resolve_advisor_mode`.
 
     Returns:
         A structured report dict suitable for ``reporting.render_markdown``.
     """
+    if mode not in ("analyze", "full"):
+        raise ValueError(f"unknown mode {mode!r}; expected analyze|full")
+    advisor_mode = resolve_advisor_mode(config, advisor_mode)
+
     portfolios = _revive_portfolios(db.load_latest_asset(session, "portfolio") or [])
     curves = _revive_curves(db.load_latest_asset(session, "curves") or [])
     coverage_version = _latest_version(session, "coverage")
@@ -295,7 +318,7 @@ def diagnose_model(
     curves_version = _latest_version(session, "curves")
 
     taxonomy, rules = load_validated_rules()
-    llm = _make_analyst_llm(config)
+    llm = None if advisor_mode == "rules" else _make_analyst_llm(config)
     benchmark_tags = {
         b.benchmark_id: (b.declared_tags or []) for b in queries.list_benchmarks(session)
     }
@@ -312,14 +335,18 @@ def diagnose_model(
             cluster_id=pf.cluster_id,
             sub_capability=_lowest_benchmark(pf, raw_scores),
             failure_modes={},
+            quantified_gap=verdict.get("quantified_gap"),
         )
-        if verdict["underperforming"] and cases:
-            failure_modes = classify_failures(
+        if verdict["underperforming"] and cases and llm is not None:
+            diagnosis.failure_modes = classify_failures(
                 llm, taxonomy, cases, sample_size=config.diagnosis.sample_size
             )
-            diagnosis.failure_modes = failure_modes
 
-        recs = _recommend_cluster(taxonomy, rules, diagnosis, config, llm, benchmark_tags)
+        recs = (
+            []
+            if mode == "analyze"
+            else _recommend_cluster(taxonomy, rules, diagnosis, config, llm, benchmark_tags)
+        )
         clusters.append(
             {
                 "cluster_id": pf.cluster_id,
@@ -347,6 +374,8 @@ def diagnose_model(
             "release_date": model.release_date.isoformat() if model.release_date else None,
         },
         "generated_at": dt.datetime.utcnow().isoformat(),
+        "mode": mode,
+        "advisor_mode": advisor_mode,
         "versions": {
             "coverage_version": coverage_version,
             "portfolio_version": portfolio_version,

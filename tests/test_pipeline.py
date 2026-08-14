@@ -53,6 +53,56 @@ def test_build_offline_and_diagnose(seeded_session):
         assert "recommendations" in cluster
 
 
+def test_diagnose_analyze_mode_skips_recommendations(seeded_session):
+    session, settings = seeded_session
+    build_offline(session, settings)
+    model = ModelRecord(
+        model_id="llama-3-8b",
+        name="Llama-3-8B",
+        arch_type="dense",
+        total_params=8.0,
+        active_params=8.0,
+    )
+    raw_scores = {"mmlu": 66.6, "math": 55.0, "swe_bench": 18.0}
+    report = diagnose_model(session, model, raw_scores, settings, mode="analyze")
+
+    assert report["mode"] == "analyze"
+    assert report["advisor_mode"] == "rules"  # no analyst LLM configured
+    assert report["clusters"]
+    for cluster in report["clusters"]:
+        assert cluster["recommendations"] == []
+        assert "quantified_gap" in cluster["diagnosis"]
+
+
+def test_diagnose_reports_quantified_gap(seeded_session):
+    session, settings = seeded_session
+    build_offline(session, settings)
+    model = ModelRecord(
+        model_id="llama-3-8b",
+        name="Llama-3-8B",
+        arch_type="dense",
+        total_params=8.0,
+        active_params=8.0,
+    )
+    raw_scores = {"mmlu_pro": 50.0, "math": 40.0, "swe_bench": 18.0}
+    report = diagnose_model(session, model, raw_scores, settings)
+
+    gaps = [
+        cluster["diagnosis"]["quantified_gap"]
+        for cluster in report["clusters"]
+        if cluster["diagnosis"]["quantified_gap"] is not None
+    ]
+    assert gaps, "at least one scored cluster should have a quantified gap"
+    assert all(isinstance(g, float) for g in gaps)
+
+
+def test_diagnose_rejects_unknown_mode(seeded_session):
+    session, settings = seeded_session
+    model = ModelRecord(model_id="x", name="x", arch_type="dense", total_params=1.0)
+    with pytest.raises(ValueError, match="unknown mode"):
+        diagnose_model(session, model, {"mmlu": 50.0}, settings, mode="bogus")
+
+
 def test_diagnose_without_offline_assets_returns_empty(seeded_session):
     session, settings = seeded_session
     model = ModelRecord(
