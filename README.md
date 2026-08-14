@@ -12,29 +12,6 @@
 
 ---
 
-## 三个核心能力
-
-| 能力 | 做法 | 复用 vs 自研 |
-|---|---|---|
-| 评测 LLM | 桥接 [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness)，`local-completions` 直连 OpenAI 兼容端点 | **复用**，只写薄桥接 |
-| 权重部署 | `vllm serve <model_id>` 起 OpenAI 兼容服务，与"给 IP"收敛成同一条评测路径 | **复用** vLLM |
-| 能力覆盖分析 | 多维 IRT（双塔打分模型，PyTorch 可选）；无 item 数据时回退因子分析（PCA+聚类） | **自研**（核心特色） |
-| 预期曲线 | 参数量→分 log-linear + 时间→前沿包络，残差转局部百分位/z-score 判"不及预期" | **自研** |
-| 归因诊断 | 标签切片 + LLM-as-analyst（固定 taxonomy，禁止自由命名） | **自研** |
-| 优化建议 | 经验规则库（YAML + 校验）+ LLM 综合 + 幻觉校验（引用/数字必须落在证据集内） | **自研** |
-
-## 系统架构（七层）
-
-```
-数据层 → 能力覆盖分析层(离线) → 代表性 benchmark 选择层(离线)
-      → 评测编排层 → 归因诊断层 → 优化建议生成层 → 报告层
-```
-
-- **离线层**（定期重跑，产出版本化静态资产）：能力覆盖表、簇级代表性组合、预期曲线。每次产出新版本号、不覆盖历史，报告可追溯。
-- **在线层**（每评测一个模型跑一次）：读取最新离线资产 → 评测 → 诊断 → 建议 → 报告。
-
----
-
 ## 运行结果（预生成）
 
 仓库随附一份基于内置 seed 跑出的离线结果（`results/`），可直接查看系统产出的图表与资产：
@@ -56,22 +33,12 @@
 >
 > 已补充 2026 主流数据集：AIME 2025、FrontierMath、MATH-500、BigCodeBench（仅 Instruct-FULL 难度档）、Terminal-Bench（仅 v1.0）、SimpleQA、MMMU、LongBench V2。分数 provenance 在 seed 的 `_note` 中标注为 `verified`（已核对）或 `estimated`（按同模型已知排位标定）。
 
-### 各 benchmark 的 SOTA 前沿（时间维度）
+### 预期曲线示例：MMLU-Pro（参数量拟合 + 时间前沿）
 
-![SOTA 前沿](results/figures/fig_frontier_overview.png)
+![MMLU-Pro 预期曲线](results/figures/fig_curves_mmlu_pro.png)
 
-### 能力覆盖画像（benchmark × 潜在维度）
-
-![能力覆盖画像](results/figures/fig_coverage_profile.png)
-
-### 预期曲线示例：MMLU（参数量拟合 + 时间前沿）
-
-![MMLU 预期曲线](results/figures/fig_curves_mmlu.png)
-
-### benchmark 分数相关性
-
-![相关性](results/figures/fig_benchmark_correlation.png)
-
+> MMLU-Pro 是 MMLU（2021）的 2024 继任基准，难度更高、数据覆盖充足，故作为预期曲线示例。
+>
 > 这些图由 `benchmark-diagnosis visualize` 生成；重跑会覆盖 `results/`，版本号随之更新。
 
 ---
