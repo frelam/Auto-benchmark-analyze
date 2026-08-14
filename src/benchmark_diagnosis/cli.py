@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from benchmark_diagnosis.config import Settings, load_config
 from benchmark_diagnosis.core import db
 from benchmark_diagnosis.core.schema import ModelRecord
-from benchmark_diagnosis.data import ingestion
+from benchmark_diagnosis.data import ingestion, queries
 from benchmark_diagnosis.evaluation_orchestration.deploy import (
     serve_command,
     wait_until_ready,
@@ -27,7 +27,11 @@ from benchmark_diagnosis.evaluation_orchestration.harness_bridge import (
     run_eval,
 )
 from benchmark_diagnosis.pipeline import build_offline, diagnose_model
-from benchmark_diagnosis.reporting.report_generator import write_report
+from benchmark_diagnosis.reporting import visualize as viz
+from benchmark_diagnosis.reporting.report_generator import (
+    render_results_summary,
+    write_report,
+)
 
 app = typer.Typer(help="One-stop LLM evaluation, low-score diagnosis, and advice.")
 console = Console()
@@ -123,6 +127,65 @@ def build_offline_cmd(ctx: typer.Context) -> None:
             console.print(f"  {k}: {v}")
     finally:
         session.close()
+
+
+@app.command()
+def visualize(
+    ctx: typer.Context,
+    out: Path = typer.Option(
+        Path("results"), "--out", help="Directory for figures + JSON archive."
+    ),
+) -> None:
+    """Render the latest offline assets as charts and archive them (JSON + summary)."""
+    settings: Settings = ctx.obj
+    _ensure_offline(settings)
+
+    session, _ = _session(settings)
+    try:
+        coverage = db.load_latest_asset(session, "coverage") or []
+        portfolios = db.load_latest_asset(session, "portfolio") or []
+        curves = db.load_latest_asset(session, "curves") or []
+        scores = queries.scores_matrix(session)
+        benchmark_names = {
+            b.benchmark_id: b.name for b in queries.list_benchmarks(session)
+        }
+        versions = {
+            "coverage_version": db.latest_version_id(session, "coverage"),
+            "portfolio_version": db.latest_version_id(session, "portfolio"),
+            "curves_version": db.latest_version_id(session, "curves"),
+        }
+    finally:
+        session.close()
+
+    fig_dir = out / "figures"
+    fig_paths: list[Path] = []
+    fig_paths += viz.render_curves(curves, fig_dir, benchmark_names)
+    fig_paths += viz.render_frontier_overview(curves, fig_dir)
+    fig_paths += viz.render_coverage_profile(coverage, fig_dir)
+    fig_paths += viz.render_coverage_metrics(coverage, fig_dir)
+    fig_paths += viz.render_correlation(scores, fig_dir)
+
+    out.mkdir(parents=True, exist_ok=True)
+    for name, data in (("coverage", coverage), ("portfolio", portfolios),
+                       ("curves", curves)):
+        (out / f"{name}.json").write_text(
+            json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+
+    figure_names = [p.name for p in fig_paths]
+    summary = render_results_summary(
+        coverage=coverage,
+        portfolios=portfolios,
+        curves=curves,
+        scores=scores,
+        benchmark_names=benchmark_names,
+        versions=versions,
+        figure_names=figure_names,
+        generated_at=dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+    )
+    (out / "README.md").write_text(summary, encoding="utf-8")
+
+    console.print(f"[green]Wrote {len(fig_paths)} figure(s) + archive to {out}/[/]")
 
 
 @app.command()

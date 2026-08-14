@@ -15,6 +15,7 @@ so they are comparable across benchmarks.
 from __future__ import annotations
 
 import datetime as dt
+import warnings
 
 import numpy as np
 from scipy.stats import percentileofscore
@@ -60,7 +61,12 @@ def fit_params_curve(
         return None
     xs = [p for p, _ in valid]
     ys = [s for _, s in valid]
-    slope, intercept = np.polyfit(np.log10(xs), _logit(np.asarray(ys)), 1)
+    with warnings.catch_warnings():
+        # Sparse open-model coverage (a handful of published parameter counts)
+        # can make the log-log design matrix near-singular; the fit is still
+        # usable as a coarse trend, so silence the numerical noise.
+        warnings.simplefilter("ignore")
+        slope, intercept = np.polyfit(np.log10(xs), _logit(np.asarray(ys)), 1)
     return ExpectationCurve(
         benchmark_id=benchmark_id,
         kind=kind,

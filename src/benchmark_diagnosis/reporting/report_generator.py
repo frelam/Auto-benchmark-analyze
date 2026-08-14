@@ -110,3 +110,87 @@ def _fmt(value: Any, digits: int = 3) -> str:
     if isinstance(value, float):
         return f"{value:.{digits}f}"
     return str(value)
+
+
+def render_results_summary(
+    *,
+    coverage: list[dict[str, Any]],
+    portfolios: list[dict[str, Any]],
+    curves: list[dict[str, Any]],
+    scores: Any,
+    benchmark_names: dict[str, str],
+    versions: dict[str, str],
+    figure_names: list[str],
+    generated_at: str,
+) -> str:
+    """Build a self-contained Markdown summary of the latest offline results.
+
+    Figure paths are referenced relative to the directory that holds this file
+    (i.e. ``figures/...``), so the archive can be dropped into a repo verbatim.
+    """
+    n_models = 0 if scores is None else int(scores.shape[0])
+    n_benchmarks = 0 if scores is None else int(scores.shape[1])
+    n_scores = 0 if scores is None else int(scores.notna().sum().sum())
+    n_clusters = len({row["primary_cluster"] for row in coverage})
+    n_curves = len(curves)
+
+    lines: list[str] = []
+    lines.append("# Benchmark Diagnosis — Offline Results")
+    lines.append("")
+    lines.append(f"_Generated {generated_at} from seed reference data "
+                 "(approximate public leaderboard values; see `_note` in the seed)._")
+    lines.append("")
+
+    lines.append("## Overview")
+    lines.append("")
+    lines.append("| metric | value |")
+    lines.append("|---|---|")
+    lines.append(f"| models | {n_models} |")
+    lines.append(f"| benchmarks | {n_benchmarks} |")
+    lines.append(f"| scores | {n_scores} |")
+    lines.append(f"| capability clusters | {n_clusters} |")
+    lines.append(f"| fitted expectation curves | {n_curves} |")
+    lines.append("")
+    lines.append("**Asset versions** (every diagnosis report traces back to these):")
+    lines.append("")
+    for key, value in versions.items():
+        lines.append(f"- `{key}`: `{value}`")
+    lines.append("")
+
+    if coverage:
+        lines.append("## Capability-coverage table")
+        lines.append("")
+        lines.append("| benchmark | cluster | breadth | reliability | saturated | "
+                     "design-goal agreement | tags |")
+        lines.append("|---|---|---|---|---|---|---|")
+        for row in sorted(coverage, key=lambda r: r["benchmark_id"]):
+            name = benchmark_names.get(row["benchmark_id"], row["benchmark_id"])
+            tags = ", ".join(row.get("design_goal_tags") or [])
+            lines.append(
+                f"| `{name}` | `{row['primary_cluster']}` | "
+                f"{row['coverage_breadth_score']:.2f} | {row['reliability_score']:.2f} | "
+                f"{'⚠️' if row.get('saturated_flag') else ''} | "
+                f"{row['design_goal_agreement_score']:.2f} | {tags} |"
+            )
+        lines.append("")
+
+    if portfolios:
+        lines.append("## Representative portfolios")
+        lines.append("")
+        for pf in sorted(portfolios, key=lambda p: p["cluster_id"]):
+            combos = ", ".join(
+                f"`{b['benchmark_id']}` ({b['weight']:.2f})" for b in pf["benchmarks"]
+            )
+            lines.append(f"- **{pf['cluster_id']}**: {combos}")
+        lines.append("")
+
+    if figure_names:
+        lines.append("## Figures")
+        lines.append("")
+        for name in figure_names:
+            lines.append(f"### {name}")
+            lines.append("")
+            lines.append(f"![{name}](figures/{name})")
+            lines.append("")
+
+    return "\n".join(lines).rstrip() + "\n"

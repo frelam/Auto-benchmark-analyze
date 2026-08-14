@@ -41,6 +41,8 @@ mirt = ["torch>=2.0"]
 eval = ["lm-eval>=0.4"]
 # Weight -> OpenAI-compatible serving via vLLM (heavy; install in the GPU env).
 serve = ["vllm>=0.6"]
+# Chart rendering for `benchmark-diagnosis visualize` (README / report figures).
+plot = ["matplotlib>=3.7"]
 dev = [
     "pytest>=7",
     "pytest-xdist>=3",

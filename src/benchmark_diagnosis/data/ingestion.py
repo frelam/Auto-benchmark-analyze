@@ -12,7 +12,6 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from benchmark_diagnosis.core.schema import BenchmarkRecord, ModelRecord, ScoreRecord

@@ -35,6 +35,33 @@
 
 ---
 
+## 运行结果（预生成）
+
+仓库随附一份基于内置 seed 跑出的离线结果（`results/`），可直接查看系统产出的图表与资产：
+
+- 完整归档：**[`results/README.md`](results/README.md)**（覆盖表 + 代表性组合 + 全部图表 + 资产版本号）
+- 原始资产：`results/coverage.json` / `results/portfolio.json` / `results/curves.json`
+
+### 各 benchmark 的 SOTA 前沿（时间维度）
+
+![SOTA 前沿](results/figures/fig_frontier_overview.png)
+
+### 能力覆盖画像（benchmark × 潜在维度）
+
+![能力覆盖画像](results/figures/fig_coverage_profile.png)
+
+### 预期曲线示例：MMLU（参数量拟合 + 时间前沿）
+
+![MMLU 预期曲线](results/figures/fig_curves_mmlu.png)
+
+### benchmark 分数相关性
+
+![相关性](results/figures/fig_benchmark_correlation.png)
+
+> 这些图由 `benchmark-diagnosis visualize` 生成；重跑会覆盖 `results/`，版本号随之更新。
+
+---
+
 ## 安装
 
 ```bash
@@ -42,6 +69,7 @@ pip install -e .                 # 核心：编排、诊断、建议
 pip install -e ".[eval]"         # + 评测桥接（lm-eval）
 pip install -e ".[serve]"        # + 权重部署（vLLM，GPU 环境）
 pip install -e ".[mirt]"         # + item 级多维 IRT（torch）
+pip install -e ".[plot]"         # + 图表渲染（`visualize` 命令）
 pip install -e ".[dev]"          # 开发依赖（pytest / ruff）
 ```
 
@@ -52,16 +80,19 @@ pip install -e ".[dev]"          # 开发依赖（pytest / ruff）
 ## 快速开始（30 秒）
 
 ```bash
-# 1. 载入 seed 参考数据（公开 leaderboard 近似值，仅用于 bootstrap 预期曲线）
+# 1. 载入 seed 参考数据（38 个模型 × 12 个 benchmark，公开 leaderboard 近似值）
 benchmark-diagnosis ingest --seed
 
 # 2. 离线构建：能力覆盖表 + 代表性组合 + 预期曲线
 benchmark-diagnosis build-offline
 
-# 3. 给定一个推理服务 IP，跑精选 benchmark 组合
+# 3. 生成图表 + 归档结果（曲线 / 覆盖分析 / 相关性，见 results/）
+benchmark-diagnosis visualize --out results
+
+# 4. 给定一个推理服务 IP，跑精选 benchmark 组合
 benchmark-diagnosis eval-model --model my-model --base-url http://<ip>:8000/v1
 
-# 4. 诊断 + 建议 + 报告（需在 config 里配分析用 LLM，见下文）
+# 5. 诊断 + 建议 + 报告（需在 config 里配分析用 LLM，见下文）
 benchmark-diagnosis diagnose --model my-model --base-url http://<ip>:8000/v1
 ```
 
@@ -90,9 +121,9 @@ llm:
 ### 例子 1：载入数据
 
 ```bash
-# 用内置 seed（18 个模型 × 6 个 benchmark，公开 leaderboard 近似值）
+# 用内置 seed（38 个模型 × 12 个 benchmark，公开 leaderboard 近似值）
 benchmark-diagnosis ingest --seed
-# 输出: Ingested: {'models': 18, 'benchmarks': 6, 'scores': 59}
+# 输出: Ingested: {'models': 38, 'benchmarks': 12, 'scores': 307}
 
 # 或载入你自己的数据（结构见 data/seed/seed_reference.json）
 benchmark-diagnosis ingest --file my_data.json
@@ -109,6 +140,8 @@ benchmark-diagnosis build-offline
 ```
 
 这三个版本号是版本化资产，之后每次诊断报告都会带上，保证可追溯。重跑会生成新版本号，不覆盖历史。
+
+再用 `benchmark-diagnosis visualize --out results` 把这些资产渲染成图表并归档（见上文「运行结果」）。
 
 ### 例子 3：部署权重（有模型权重时）
 
@@ -215,5 +248,5 @@ ruff check src tests   # 风格检查
 
 ## 说明
 
-- `data/seed/seed_reference.json` 是**近似值**（公开 leaderboard 近似数），仅用于 bootstrap 预期曲线，生产前请用真实数据替换。
+- `data/seed/seed_reference.json` 是**近似值**（公开 leaderboard 近似数，覆盖到 2025 年初的前沿模型：GPT-4o/o1/o3、Claude 3.5/3.7、Gemini 2.0/2.5、DeepSeek-V3/R1、Qwen2.5、Llama-3.1/3.3 等），仅用于 bootstrap 预期曲线，生产前请用真实数据替换。
 - 参数量不可得的闭源模型，预期曲线自动走"时间→前沿包络"维度判定，不会被漏掉。
