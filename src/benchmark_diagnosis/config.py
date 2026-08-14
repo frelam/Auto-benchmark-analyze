@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field
@@ -63,6 +63,37 @@ class DiagnosisConfig(BaseModel):
 class RecommendationConfig(BaseModel):
     retrieval_enabled: bool = False
     max_external_sources: int = 5
+    advisor_mode: Literal["auto", "llm_rules", "rules"] = "auto"
+
+
+class RunModelConfig(BaseModel):
+    """Model source + metadata for a unified ``run``.
+
+    ``source`` selects where the evaluated model comes from: ``weights``
+    (auto-deploy via vLLM), ``endpoint`` (an existing OpenAI-compatible
+    inference service IP), or ``scores`` (skip evaluation, read a JSON scores
+    file). When ``None`` it is auto-derived from whichever of ``weights`` /
+    ``base_url`` / ``scores_file`` is set.
+    """
+
+    name: str | None = None
+    source: Literal["weights", "endpoint", "scores"] | None = None
+    weights: str | None = None
+    base_url: str | None = None
+    scores_file: str | None = None
+    arch: str | None = None
+    params: float | None = None
+    release_date: str | None = None
+
+
+class RunOutputConfig(BaseModel):
+    dir: str = "data/run_output"
+
+
+class RunConfig(BaseModel):
+    mode: Literal["analyze", "full"] = "full"
+    model: RunModelConfig = Field(default_factory=RunModelConfig)
+    output: RunOutputConfig = Field(default_factory=RunOutputConfig)
 
 
 class Settings(BaseModel):
@@ -73,6 +104,7 @@ class Settings(BaseModel):
     curves: CurvesConfig = Field(default_factory=CurvesConfig)
     diagnosis: DiagnosisConfig = Field(default_factory=DiagnosisConfig)
     recommendation: RecommendationConfig = Field(default_factory=RecommendationConfig)
+    run: RunConfig = Field(default_factory=RunConfig)
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -87,18 +119,27 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 
 
 def _apply_env_overrides(data: dict[str, Any]) -> dict[str, Any]:
-    """Apply ``BMD_<SECTION>__<FIELD>`` environment variables (double underscore
-    separates section from field; single underscore stays inside a key)."""
+    """Apply ``BMD_<SECTION>__<FIELD>`` environment variables.
+
+    Double underscore separates nested keys, so ``BMD_RUN__MODEL__NAME`` walks
+    ``data["run"]["model"]["name"]``; single underscore stays inside a key.
+    Primitives are coerced YAML-style (booleans/numbers/None).
+    """
     for env_key, raw in os.environ.items():
         if not env_key.startswith("BMD_"):
             continue
-        parts = env_key[4:].lower().split("__")
-        if len(parts) != 2:
+        parts = [p for p in env_key[4:].lower().split("__") if p]
+        if len(parts) < 2:
             continue
-        section, field = parts
-        if section in data and isinstance(data[section], dict):
-            # Best-effort primitive coercion (YAML-like booleans/numbers).
-            data[section][field] = _coerce(raw)
+        node = data
+        for part in parts[:-1]:
+            if isinstance(node, dict) and part in node and isinstance(node[part], dict):
+                node = node[part]
+            else:
+                break
+        else:
+            if isinstance(node, dict) and parts[-1] in node:
+                node[parts[-1]] = _coerce(raw)
     return data
 
 
@@ -116,6 +157,37 @@ def _coerce(raw: str) -> Any:
         return float(raw)
     except ValueError:
         return raw
+
+
+def resolve_advisor_mode(config: Settings, requested: str | None = None) -> str:
+    """Resolve the effective recommendation advisor mode.
+
+    ``requested`` (or ``config.recommendation.advisor_mode``) is one of
+    ``auto`` / ``llm_rules`` / ``rules``:
+
+    * ``rules`` — always the rule-based advisor (a configured LLM is ignored and
+      failure-mode classification is skipped).
+    * ``llm_rules`` — requires ``config.llm.model``; raises ``ValueError`` if no
+      analyst LLM is configured so misconfiguration fails before evaluation.
+    * ``auto`` — ``llm_rules`` when an analyst LLM is configured, else ``rules``.
+
+    Returns the resolved mode (``"llm_rules"`` or ``"rules"``).
+    """
+    mode = requested or config.recommendation.advisor_mode
+    has_llm = bool(config.llm.model)
+    if mode == "rules":
+        return "rules"
+    if mode == "llm_rules":
+        if not has_llm:
+            raise ValueError(
+                "advisor_mode='llm_rules' requires an analyst LLM: set "
+                "llm.model (and base_url) in the config, or use "
+                "advisor_mode='auto'|'rules'."
+            )
+        return "llm_rules"
+    if mode == "auto":
+        return "llm_rules" if has_llm else "rules"
+    raise ValueError(f"unknown advisor_mode {mode!r}; expected auto|llm_rules|rules")
 
 
 def load_config(path: str | Path | None = None) -> Settings:

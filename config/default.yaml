@@ -45,3 +45,24 @@ diagnosis:
 recommendation:
   retrieval_enabled: false     # external paper/report RAG (off by default)
   max_external_sources: 5
+  # Advisor used to produce optimization recommendations:
+  #   auto       -> llm_rules when llm.model is configured, else rules
+  #   llm_rules  -> LLM selects/orders/explains from the rule base (needs llm.model)
+  #   rules      -> deterministic rule-based only (ignores any configured LLM)
+  advisor_mode: auto
+
+# Unified run profile consumed by `benchmark-diagnosis run`. The same keys can
+# be passed as CLI args; CLI args take precedence over this section.
+run:
+  mode: full                  # analyze | full
+  model:
+    name: null                # logical model id/name (required for run)
+    source: null              # weights | endpoint | scores (null => auto-detect)
+    weights: null             # HF id or local path (source=weights -> auto-deploy)
+    base_url: null            # OpenAI-compatible /v1 endpoint (source=endpoint)
+    scores_file: null         # JSON {benchmark_id: score} (source=scores, skip eval)
+    arch: null                # dense | moe
+    params: null              # parameter count in billions
+    release_date: null        # ISO date
+  output:
+    dir: data/run_output      # report.md + metrics.json + figures/ land here
