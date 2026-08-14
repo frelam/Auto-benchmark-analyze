@@ -3,16 +3,16 @@
     "cluster_id": "cluster_0",
     "benchmarks": [
       {
-        "benchmark_id": "ifeval",
-        "weight": 0.816367219910473
+        "benchmark_id": "longbench_v2",
+        "weight": 0.8339027051376603
       },
       {
-        "benchmark_id": "livecodebench",
-        "weight": 0.14261870720332168
+        "benchmark_id": "frontiermath",
+        "weight": 0.11708882640668815
       },
       {
         "benchmark_id": "mmlu_pro",
-        "weight": 0.04101407288620533
+        "weight": 0.049008468455651516
       }
     ]
   },
@@ -20,8 +20,16 @@
     "cluster_id": "cluster_1",
     "benchmarks": [
       {
-        "benchmark_id": "mmlu",
-        "weight": 1.0
+        "benchmark_id": "simpleqa",
+        "weight": 0.935254801125754
+      },
+      {
+        "benchmark_id": "ifeval",
+        "weight": 0.037462764960141705
+      },
+      {
+        "benchmark_id": "math",
+        "weight": 0.02728243391410431
       }
     ]
   },
@@ -29,12 +37,34 @@
     "cluster_id": "cluster_2",
     "benchmarks": [
       {
-        "benchmark_id": "tau2_bench",
-        "weight": 0.9995618406162835
+        "benchmark_id": "swe_bench",
+        "weight": 0.9259543608651996
       },
       {
-        "benchmark_id": "swe_bench",
-        "weight": 0.00043815938371655064
+        "benchmark_id": "tau2_bench",
+        "weight": 0.0509389048951525
+      },
+      {
+        "benchmark_id": "livecodebench",
+        "weight": 0.02310673423964799
+      }
+    ]
+  },
+  {
+    "cluster_id": "cluster_3",
+    "benchmarks": [
+      {
+        "benchmark_id": "terminal_bench",
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "cluster_id": "cluster_4",
+    "benchmarks": [
+      {
+        "benchmark_id": "mmmlu",
+        "weight": 1.0
       }
     ]
   }

@@ -125,14 +125,17 @@ def _from_mirt(
         by_benchmark[item_benchmark.get(item_id, "unknown")].append(idx)
 
     abs_alpha = np.abs(mirt.alpha)  # (n_items, dims)
+    signed_alpha = np.asarray(mirt.alpha, dtype=np.float64)
     theta_mean = mirt.theta.mean(axis=0)
 
     # Precompute per-benchmark raw reliability for later min-max normalization.
     raw_rel: dict[str, float] = {}
     profiles: dict[str, np.ndarray] = {}
+    signed_profiles: dict[str, np.ndarray] = {}
     for bid, idxs in by_benchmark.items():
         prof = abs_alpha[idxs].mean(axis=0)
         profiles[bid] = prof
+        signed_profiles[bid] = signed_alpha[idxs].mean(axis=0)
         # Fisher information per item at mean ability: ||alpha||^2 * p(1-p).
         info = 0.0
         for i in idxs:
@@ -159,14 +162,15 @@ def _from_mirt(
         profile_dict = {f"dim_{i}": float(v / norm) for i, v in enumerate(prof)}
         cluster = f"dim_{primary_dim[bid]}"
         own_tags = _declared_tags(meta.get(bid), bid)
-        other_tags = cluster_tag_map[cluster] - set(own_tags)
-        agree = agreement_score(own_tags, sorted(other_tags))
+        cluster_tags = sorted(cluster_tag_map[cluster])  # full union
+        agree = agreement_score(own_tags, cluster_tags)
         reliability = 1.0 if rel_max == rel_min else (raw_rel[bid] - rel_min) / (rel_max - rel_min)
         entries.append(
             CoverageEntry(
                 benchmark_id=bid,
                 primary_cluster=cluster,
                 discrimination_profile=profile_dict,
+                factor_loadings=[float(v) for v in signed_profiles[bid]],
                 coverage_breadth_score=_entropy(prof),
                 reliability_score=float(reliability),
                 saturated_flag=_saturation(score_frame, bid),
@@ -189,24 +193,25 @@ def _from_factor(
 
     entries: list[CoverageEntry] = []
     for i, bid in enumerate(factor.benchmark_ids):
-        load = loadings[i]
+        load = loadings[i]  # signed; keep sign for the map embedding
         norm = load.sum() or 1.0
         profile = {f"f{j}": float(v / norm) for j, v in enumerate(load)}
         cluster = f"cluster_{factor.clusters[i]}"
         own_tags = _declared_tags(meta.get(bid), bid)
-        other_tags = cluster_map[cluster] - set(own_tags)
+        cluster_tags = sorted(cluster_map[cluster])  # full union: coherent clusters score high
         communality = float(np.clip((load**2).sum(), 0.0, 1.0))
         entries.append(
             CoverageEntry(
                 benchmark_id=bid,
                 primary_cluster=cluster,
                 discrimination_profile=profile,
+                factor_loadings=[float(v) for v in factor.loadings[i]],
                 coverage_breadth_score=_entropy(load),
                 reliability_score=communality,
                 saturated_flag=_saturation(score_frame, bid),
                 scoring_method=_scoring_method(meta.get(bid), bid),
                 design_goal_tags=own_tags,
-                design_goal_agreement_score=agreement_score(own_tags, sorted(other_tags)),
+                design_goal_agreement_score=agreement_score(own_tags, cluster_tags),
                 granularity=Granularity.AGGREGATE_ONLY,
             )
         )

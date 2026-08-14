@@ -34,6 +34,7 @@ class CoverageEntry:
     benchmark_id: str
     primary_cluster: str
     discrimination_profile: dict[str, float]
+    factor_loadings: list[float]  # signed loadings (shape n_factors); the map embeds these
     coverage_breadth_score: float
     reliability_score: float
     saturated_flag: bool

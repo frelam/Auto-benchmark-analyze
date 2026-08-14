@@ -36,6 +36,7 @@ except ImportError as exc:  # pragma: no cover - depends on optional extra
 
 _EPOCH = dt.date(2020, 1, 1)
 _DPI = 130
+_MIN_SHARED_CORR = 10  # benchmark pairs must share this many models to show a correlation
 
 # Distinctive but colorblind-friendly palette (Okabe-Ito-ish).
 _C_DENSE = "#0072B2"
@@ -231,6 +232,38 @@ def render_coverage_metrics(coverage: list[dict], out_dir: Path) -> list[Path]:
     return [path]
 
 
+def _embed_cluster_map(rows: list[dict]) -> np.ndarray:
+    """2D coordinates for the cluster map from signed factor loadings.
+
+    Embeds from the signed ``factor_loadings`` when present (falling back to the
+    normalized ``discrimination_profile``). Each benchmark's loading vector is
+    unit-normalized before a 2-component PCA so spatial distance tracks loading
+    *direction* (≈ pairwise correlation) rather than loading magnitude, which
+    would otherwise push a strong-on-the-dominant-factor benchmark far from a
+    correlated but weaker one (the original map bug).
+    """
+    from sklearn.decomposition import PCA
+
+    if any(row.get("factor_loadings") for row in rows):
+        n_factors = max(len(row["factor_loadings"]) for row in rows)
+        matrix = np.array(
+            [row["factor_loadings"] + [0.0] * (n_factors - len(row["factor_loadings"]))
+             for row in rows],
+            dtype=np.float64,
+        )
+    else:
+        dims = sorted({d for row in rows for d in row["discrimination_profile"]})
+        matrix = np.array(
+            [[row["discrimination_profile"].get(d, 0.0) for d in dims] for row in rows]
+        )
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    matrix = matrix / norms
+    if matrix.shape[1] >= 2:
+        return PCA(n_components=2, random_state=0).fit_transform(matrix)
+    return np.column_stack([matrix[:, 0], np.zeros(matrix.shape[0])])
+
+
 def render_cluster_map(
     coverage: list[dict],
     out_dir: Path,
@@ -238,16 +271,16 @@ def render_cluster_map(
 ) -> list[Path]:
     """Scatter benchmarks in factor space, colored by cluster + labeled by capability.
 
-    The 2D embedding is a PCA of each benchmark's discrimination profile, so
-    proximity means "these benchmarks' scores co-vary across models". A cluster
-    is therefore a group of *correlated capabilities* — the kind that tend to
+    The 2D embedding is a PCA of each benchmark's *unit-normalized signed factor
+    loadings*, so spatial proximity means "these benchmarks' scores co-vary
+    across models" (distance reflects loading direction ≈ correlation, not the
+    strength of each benchmark's loading on the dominant factor). A cluster is
+    therefore a group of *correlated capabilities* — the kind that tend to
     transfer together during training — and is labeled with its dominant tags.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     if len(coverage) < 2:
         return []
-
-    from sklearn.decomposition import PCA
 
     from benchmark_diagnosis.reporting.report_generator import (
         cluster_capability_labels,
@@ -255,14 +288,7 @@ def render_cluster_map(
 
     names = benchmark_names or {}
     rows = sorted(coverage, key=lambda r: (r["primary_cluster"], r["benchmark_id"]))
-    dims = sorted({d for row in rows for d in row["discrimination_profile"]})
-    matrix = np.array(
-        [[row["discrimination_profile"].get(d, 0.0) for d in dims] for row in rows]
-    )
-    if matrix.shape[1] >= 2:
-        coords = PCA(n_components=2, random_state=0).fit_transform(matrix)
-    else:
-        coords = np.column_stack([matrix[:, 0], np.zeros(matrix.shape[0])])
+    coords = _embed_cluster_map(rows)
 
     cluster_labels = cluster_capability_labels(coverage)
     clusters = sorted({row["primary_cluster"] for row in rows})
@@ -302,12 +328,18 @@ def render_cluster_map(
 
 
 def render_correlation(scores, out_dir: Path) -> list[Path]:
-    """Pearson correlation heatmap over benchmarks (min 2 shared models)."""
+    """Spearman correlation heatmap over benchmarks (min shared-models).
+
+    Rank-based correlation is used so that saturated benchmarks (GSM8K,
+    HumanEval, ...) do not have their ceiling-compressed variance mistaken for
+    low relatedness. Pairs with fewer than ``_MIN_SHARED_CORR`` co-observed
+    models are left blank rather than estimated from a tiny sample.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     if scores is None or scores.shape[1] < 2:
         return []
 
-    corr = scores.corr(min_periods=2)
+    corr = scores.corr(method="spearman", min_periods=_MIN_SHARED_CORR)
     corr = corr.dropna(axis=0, how="all").dropna(axis=1, how="all")
     if corr.empty or corr.shape[0] < 2:
         return []
@@ -326,8 +358,8 @@ def render_correlation(scores, out_dir: Path) -> list[Path]:
             if np.isfinite(value):
                 ax.text(j, i, f"{value:.2f}", ha="center", va="center",
                         fontsize=6, color="white" if abs(value) > 0.55 else "#222222")
-    fig.colorbar(im, ax=ax, shrink=0.85, label="Pearson r")
-    ax.set_title("Benchmark score correlation")
+    fig.colorbar(im, ax=ax, shrink=0.85, label="Spearman rho")
+    ax.set_title("Benchmark score correlation (Spearman)")
     fig.tight_layout()
     path = out_dir / "fig_benchmark_correlation.png"
     fig.savefig(path, dpi=_DPI, bbox_inches="tight")

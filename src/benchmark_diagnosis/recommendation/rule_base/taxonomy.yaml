@@ -15,6 +15,9 @@ capabilities:
   - safety
   - multilingual
   - agentic_tool_use
+  - factuality           # 事实性 / 幻觉抑制
+  - vision               # 多模态视觉理解
+  - long_context         # 长上下文利用
 
 # Training levers that a rule can target (rule.category must be one of these).
 training_levers:

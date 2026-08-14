@@ -90,6 +90,80 @@ def test_fit_factor_model_rejects_insufficient_benchmarks() -> None:
         fit_factor_model(scores[["b4"]])
 
 
+def test_rank_factor_keeps_code_benchmarks_together() -> None:
+    """MNAR missingness + ceiling saturation must not split a capability family.
+
+    Regression test for the cluster-map accuracy fix: coding/agentic benchmarks
+    (the ``code_*`` family) share a genuine covariance pattern but are only
+    reported for recent models (missing-not-at-random), while the easy ``sat_*``
+    benchmarks saturate near the ceiling. Mean-imputation + Pearson PCA splits
+    the code family apart; pairwise Spearman eigendecomposition keeps it intact.
+    """
+    rng = np.random.default_rng(7)
+    # Shared latent factor: "general" ability.
+    general = rng.normal(size=40)
+    # Code-specific factor, only expressed (observed) for recent models.
+    code_latent = rng.normal(size=40)
+    recent = np.zeros(40, dtype=bool)
+    recent[20:] = True  # only the 20 most recent models report agentic benchmarks
+
+    def _b(gen_w: float, code_w: float, base: float) -> list[float]:
+        vals = base + gen_w * general + code_w * code_latent + rng.normal(0, 0.3, 40)
+        return np.clip(vals, 1.0, 99.0).tolist()
+
+    df = pd.DataFrame(
+        {
+            "sat_0": _b(1.0, 0.0, 60.0),  # saturated, general-only (top ~98)
+            "sat_1": _b(1.0, 0.0, 60.0),
+            "code_a": _b(0.8, 1.0, 20.0),  # code, reported for everyone
+            "code_b": _b(0.8, 1.0, 20.0),
+        }
+    )
+    df.loc[~recent, ["code_b"]] = np.nan  # MNAR: code_b missing for old models
+    # Saturate the easy benchmarks.
+    df["sat_0"] = df["sat_0"].clip(upper=97.0)
+    df["sat_1"] = df["sat_1"].clip(upper=97.0)
+
+    model = fit_factor_model(df, n_factors=2)
+    cluster_of = dict(zip(model.benchmark_ids, model.clusters, strict=True))
+    assert cluster_of["code_a"] == cluster_of["code_b"]
+
+
+def test_clusters_invariant_to_benchmark_column_order() -> None:
+    """KMeans groupings must not depend on the input frame's column order.
+
+    k-means++ seeds initial centroids by row index, so reordering the benchmark
+    columns (which permutes the loading rows) can silently change the clustering.
+    fit_factor_model canonicalizes column order so results are stable.
+    """
+    rng = np.random.default_rng(11)
+    n = 30
+    general = rng.normal(size=n)
+    math_spec = rng.normal(size=n)
+    code_spec = rng.normal(size=n)
+
+    def _mk(gw: float, mw: float, cw: float) -> list[float]:
+        vals = 50.0 + gw * general + mw * math_spec + cw * code_spec
+        return (vals + rng.normal(0, 0.4, n)).clip(0.0, 100.0).tolist()
+
+    cols: dict[str, list[float]] = {}
+    for i in range(3):
+        cols[f"math_{i}"] = _mk(1.0, 1.0, 0.0)
+        cols[f"code_{i}"] = _mk(1.0, 0.0, 1.0)
+        cols[f"gen_{i}"] = _mk(1.0, 0.0, 0.0)
+    df = pd.DataFrame(cols, index=[f"m{i}" for i in range(n)])
+
+    def grouping(m: FactorModel) -> list[list[str]]:
+        g: dict[int, list[str]] = {}
+        for bid, label in zip(m.benchmark_ids, m.clusters, strict=True):
+            g.setdefault(label, []).append(bid)
+        return sorted(sorted(v) for v in g.values())
+
+    m_a = fit_factor_model(df, n_factors=3)
+    m_b = fit_factor_model(df[list(reversed(df.columns))], n_factors=3)
+    assert grouping(m_a) == grouping(m_b)
+
+
 def test_agreement_score() -> None:
     assert agreement_score([], ["a"]) == 0.0
     assert agreement_score(["a", "b"], []) == 0.0

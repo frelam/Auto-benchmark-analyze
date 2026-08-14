@@ -31,6 +31,7 @@ def make_entry(
         benchmark_id=benchmark_id,
         primary_cluster=cluster,
         discrimination_profile=profile,
+        factor_loadings=list(profile.values()),
         coverage_breadth_score=breadth,
         reliability_score=reliability,
         saturated_flag=saturated,

@@ -3,199 +3,437 @@
     "benchmark_id": "aime24",
     "primary_cluster": "cluster_0",
     "discrimination_profile": {
-      "f0": 0.5252004404196875,
-      "f1": 0.29004624005363144,
-      "f2": 0.1847533195266811
+      "f0": 0.5742369802195324,
+      "f1": 0.014817351649461144,
+      "f2": 0.18491759859643567,
+      "f3": 0.17546815996658174,
+      "f4": 0.05055990956798904
     },
-    "coverage_breadth_score": 0.9186223800864671,
-    "reliability_score": 0.16456499114530293,
+    "factor_loadings": [
+      0.9159303942771911,
+      -0.02363425415974821,
+      -0.29495078656632917,
+      -0.27987856316714754,
+      -0.08064502896961309
+    ],
+    "coverage_breadth_score": 0.7141168977855956,
+    "reliability_score": 1.0,
     "saturated_flag": false,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
       "math",
       "reasoning"
     ],
-    "design_goal_agreement_score": 0.0,
+    "design_goal_agreement_score": 0.4,
+    "granularity": "aggregate_only"
+  },
+  {
+    "benchmark_id": "aime25",
+    "primary_cluster": "cluster_0",
+    "discrimination_profile": {
+      "f0": 0.5153336920273195,
+      "f1": 0.2802464050523998,
+      "f2": 0.09194435797276597,
+      "f3": 0.07060495718522744,
+      "f4": 0.04187058776228734
+    },
+    "factor_loadings": [
+      0.8189541859918977,
+      0.44535990966155714,
+      -0.146115454908278,
+      -0.11220346376179764,
+      -0.06653959104239689
+    ],
+    "coverage_breadth_score": 0.7689497816740773,
+    "reliability_score": 0.9073982685066897,
+    "saturated_flag": true,
+    "scoring_method": "rule_verified",
+    "design_goal_tags": [
+      "math",
+      "reasoning"
+    ],
+    "design_goal_agreement_score": 0.4,
     "granularity": "aggregate_only"
   },
   {
     "benchmark_id": "arc_challenge",
     "primary_cluster": "cluster_1",
     "discrimination_profile": {
-      "f0": 0.23753316889843168,
-      "f1": 0.6397487145670515,
-      "f2": 0.1227181165345169
+      "f0": 0.6195571187006765,
+      "f1": 0.05834739700938332,
+      "f2": 0.2933082216682816,
+      "f3": 0.011404280728232042,
+      "f4": 0.01738298189342648
     },
-    "coverage_breadth_score": 0.8052435810603092,
-    "reliability_score": 0.22895057982914496,
+    "factor_loadings": [
+      0.8963163962205398,
+      0.08441147238526993,
+      0.42433047784022226,
+      0.016498630223559296,
+      0.025148047235674358
+    ],
+    "coverage_breadth_score": 0.5862980132693553,
+    "reliability_score": 0.9914693623071578,
     "saturated_flag": true,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
       "commonsense_knowledge",
       "reasoning"
     ],
-    "design_goal_agreement_score": 0.0,
+    "design_goal_agreement_score": 0.2857142857142857,
+    "granularity": "aggregate_only"
+  },
+  {
+    "benchmark_id": "bigcodebench",
+    "primary_cluster": "cluster_2",
+    "discrimination_profile": {
+      "f0": 0.4799481958704878,
+      "f1": 0.07531670230929283,
+      "f2": 0.16005796007640158,
+      "f3": 0.17311168638866126,
+      "f4": 0.11156545535515658
+    },
+    "factor_loadings": [
+      0.843667844604309,
+      -0.1323940384539587,
+      -0.28135485319307074,
+      0.30430109871847427,
+      -0.19611322234698486
+    ],
+    "coverage_breadth_score": 0.8628098023758616,
+    "reliability_score": 0.9395237215133118,
+    "saturated_flag": false,
+    "scoring_method": "rule_verified",
+    "design_goal_tags": [
+      "code"
+    ],
+    "design_goal_agreement_score": 0.25,
+    "granularity": "aggregate_only"
+  },
+  {
+    "benchmark_id": "frontiermath",
+    "primary_cluster": "cluster_0",
+    "discrimination_profile": {
+      "f0": 0.40526703825677163,
+      "f1": 0.385431880798937,
+      "f2": 0.058037849732582955,
+      "f3": 0.08828621274800777,
+      "f4": 0.06297701846370068
+    },
+    "factor_loadings": [
+      0.8274695170310519,
+      0.7869703236289222,
+      -0.1185010053971216,
+      -0.18026176058465573,
+      0.12858574256709443
+    ],
+    "coverage_breadth_score": 0.7997440525623878,
+    "reliability_score": 1.0,
+    "saturated_flag": false,
+    "scoring_method": "rule_verified",
+    "design_goal_tags": [
+      "math",
+      "reasoning"
+    ],
+    "design_goal_agreement_score": 0.4,
     "granularity": "aggregate_only"
   },
   {
     "benchmark_id": "gpqa",
     "primary_cluster": "cluster_0",
     "discrimination_profile": {
-      "f0": 0.5792751243923794,
-      "f1": 0.30490785182163843,
-      "f2": 0.11581702378598209
+      "f0": 0.6168905242163414,
+      "f1": 0.02237514884124798,
+      "f2": 0.06541527075004828,
+      "f3": 0.1964041086241866,
+      "f4": 0.09891494756817559
     },
-    "coverage_breadth_score": 0.8447895013642052,
-    "reliability_score": 0.14590036166315207,
+    "factor_loadings": [
+      0.9321147156680515,
+      -0.03380860084807526,
+      -0.09884174598562369,
+      -0.29676442201609887,
+      -0.1494593847829894
+    ],
+    "coverage_breadth_score": 0.6896251362412853,
+    "reliability_score": 0.9901577852799824,
     "saturated_flag": false,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
       "world_knowledge",
       "reasoning"
     ],
-    "design_goal_agreement_score": 0.0,
+    "design_goal_agreement_score": 0.4,
     "granularity": "aggregate_only"
   },
   {
     "benchmark_id": "gsm8k",
     "primary_cluster": "cluster_1",
     "discrimination_profile": {
-      "f0": 0.19283621282631014,
-      "f1": 0.5841390375465751,
-      "f2": 0.22302474962711466
+      "f0": 0.31813029208653554,
+      "f1": 0.11771399568885946,
+      "f2": 0.19275863269811314,
+      "f3": 0.11887233907978416,
+      "f4": 0.25252474044670764
     },
-    "coverage_breadth_score": 0.8793611689062356,
-    "reliability_score": 0.23025789959910814,
+    "factor_loadings": [
+      0.7027513546446365,
+      0.2600307860921241,
+      0.4258047523849118,
+      0.26258957224787494,
+      0.5578283736084366
+    ],
+    "coverage_breadth_score": 0.9532784649375001,
+    "reliability_score": 1.0,
     "saturated_flag": true,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
       "math",
       "reasoning"
     ],
-    "design_goal_agreement_score": 0.0,
+    "design_goal_agreement_score": 0.2857142857142857,
     "granularity": "aggregate_only"
   },
   {
     "benchmark_id": "hellaswag",
     "primary_cluster": "cluster_1",
     "discrimination_profile": {
-      "f0": 0.41114699065421356,
-      "f1": 0.5510501360609776,
-      "f2": 0.037802873284808795
+      "f0": 0.395406251021841,
+      "f1": 0.22154127471055693,
+      "f2": 0.2391935756990532,
+      "f3": 0.027189815069713203,
+      "f4": 0.11666908349883574
     },
-    "coverage_breadth_score": 0.7442431916423533,
-    "reliability_score": 0.15054528450739404,
+    "factor_loadings": [
+      0.8163104006202176,
+      0.45736870938567686,
+      0.4938116256383896,
+      0.056132974061457654,
+      -0.24086161016626811
+    ],
+    "coverage_breadth_score": 0.8646509259964741,
+    "reliability_score": 1.0,
     "saturated_flag": true,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
       "commonsense_knowledge",
       "reading_comprehension"
     ],
-    "design_goal_agreement_score": 0.0,
+    "design_goal_agreement_score": 0.2857142857142857,
     "granularity": "aggregate_only"
   },
   {
     "benchmark_id": "humaneval",
-    "primary_cluster": "cluster_1",
+    "primary_cluster": "cluster_2",
     "discrimination_profile": {
-      "f0": 0.2949702392185393,
-      "f1": 0.49689677568391805,
-      "f2": 0.20813298509754255
+      "f0": 0.4130587784542365,
+      "f1": 0.22447552723924885,
+      "f2": 0.17852385897219114,
+      "f3": 0.18021795416206945,
+      "f4": 0.0037238811722540835
     },
-    "coverage_breadth_score": 0.9414792229487887,
-    "reliability_score": 0.21132076161860863,
+    "factor_loadings": [
+      0.83973314174921,
+      -0.4563504023321683,
+      0.3629323689304427,
+      0.36637640147598594,
+      -0.007570511993425908
+    ],
+    "coverage_breadth_score": 0.8312378154969,
+    "reliability_score": 1.0,
     "saturated_flag": true,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
       "code"
     ],
-    "design_goal_agreement_score": 0.0,
+    "design_goal_agreement_score": 0.25,
     "granularity": "aggregate_only"
   },
   {
     "benchmark_id": "humaneval_plus",
-    "primary_cluster": "cluster_0",
+    "primary_cluster": "cluster_2",
     "discrimination_profile": {
-      "f0": 0.32929655779238654,
-      "f1": 0.14598187536136403,
-      "f2": 0.5247215668462494
+      "f0": 0.41267086852841517,
+      "f1": 0.21320333515288326,
+      "f2": 0.10130395997274534,
+      "f3": 0.13162940992106567,
+      "f4": 0.14119242642489058
     },
-    "coverage_breadth_score": 0.8966555568619766,
-    "reliability_score": 0.25075846620650727,
+    "factor_loadings": [
+      0.7960172715275506,
+      -0.41125640327889085,
+      0.19540924247936917,
+      0.25390521049327097,
+      -0.2723516938423215
+    ],
+    "coverage_breadth_score": 0.9133806739037212,
+    "reliability_score": 0.9796033989088307,
     "saturated_flag": false,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
       "code"
     ],
-    "design_goal_agreement_score": 0.0,
+    "design_goal_agreement_score": 0.25,
     "granularity": "aggregate_only"
   },
   {
     "benchmark_id": "ifeval",
-    "primary_cluster": "cluster_0",
+    "primary_cluster": "cluster_1",
     "discrimination_profile": {
-      "f0": 0.4014342501669604,
-      "f1": 0.18548073879122162,
-      "f2": 0.4130850110418179
+      "f0": 0.6028303435463693,
+      "f1": 0.04212116928568867,
+      "f2": 0.22218671407873847,
+      "f3": 0.004738602441100427,
+      "f4": 0.1281231706481031
     },
-    "coverage_breadth_score": 0.950382259639146,
-    "reliability_score": 0.2096767340935561,
+    "factor_loadings": [
+      0.8696643878652823,
+      0.06076548948666302,
+      0.3205344169544472,
+      -0.006836075581453459,
+      -0.1848350202770956
+    ],
+    "coverage_breadth_score": 0.6594575031424929,
+    "reliability_score": 0.8969616213361671,
     "saturated_flag": false,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
       "instruction_following"
     ],
-    "design_goal_agreement_score": 0.0,
+    "design_goal_agreement_score": 0.14285714285714285,
     "granularity": "aggregate_only"
   },
   {
     "benchmark_id": "livecodebench",
-    "primary_cluster": "cluster_0",
+    "primary_cluster": "cluster_2",
     "discrimination_profile": {
-      "f0": 0.647279050714437,
-      "f1": 0.32854006665294766,
-      "f2": 0.024180882632615405
+      "f0": 0.4809763337666928,
+      "f1": 0.2005658843398568,
+      "f2": 0.10340365255664082,
+      "f3": 0.10170144434791896,
+      "f4": 0.11335268498889046
     },
-    "coverage_breadth_score": 0.6710781528831644,
-    "reliability_score": 0.15610937291454782,
+    "factor_loadings": [
+      0.8658790802428025,
+      -0.3610693318322801,
+      -0.18615273410296573,
+      0.18308832869530844,
+      -0.20406350943005458
+    ],
+    "coverage_breadth_score": 0.8625176291815403,
+    "reliability_score": 0.9899337363912916,
     "saturated_flag": false,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
       "code",
       "reasoning"
     ],
-    "design_goal_agreement_score": 0.0,
+    "design_goal_agreement_score": 0.5,
+    "granularity": "aggregate_only"
+  },
+  {
+    "benchmark_id": "longbench_v2",
+    "primary_cluster": "cluster_0",
+    "discrimination_profile": {
+      "f0": 0.4768771082843943,
+      "f1": 0.1330510903721503,
+      "f2": 0.1128025754338706,
+      "f3": 0.23601546542469234,
+      "f4": 0.041253760484892585
+    },
+    "factor_loadings": [
+      0.7792904085648495,
+      0.2174259086353062,
+      -0.1843367265274641,
+      -0.38568550530788925,
+      0.0674149782084653
+    ],
+    "coverage_breadth_score": 0.8325462155945046,
+    "reliability_score": 0.8418456836653696,
+    "saturated_flag": false,
+    "scoring_method": "rule_verified",
+    "design_goal_tags": [
+      "long_context",
+      "reading_comprehension"
+    ],
+    "design_goal_agreement_score": 0.4,
     "granularity": "aggregate_only"
   },
   {
     "benchmark_id": "math",
-    "primary_cluster": "cluster_0",
+    "primary_cluster": "cluster_1",
     "discrimination_profile": {
-      "f0": 0.4734013839682409,
-      "f1": 0.06089807837008422,
-      "f2": 0.46570053766167474
+      "f0": 0.8428980428478051,
+      "f1": 0.01836516284187468,
+      "f2": 0.03789810793161242,
+      "f3": 0.0424785038988663,
+      "f4": 0.05836018247984155
     },
-    "coverage_breadth_score": 0.801316154396551,
-    "reliability_score": 0.15499923176868527,
+    "factor_loadings": [
+      0.9906075835026684,
+      0.021583475887495172,
+      0.04453937630536954,
+      -0.04992244133809499,
+      0.06858722692463201
+    ],
+    "coverage_breadth_score": 0.3985818696989944,
+    "reliability_score": 0.99094944481242,
     "saturated_flag": false,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
       "math",
       "reasoning"
     ],
-    "design_goal_agreement_score": 0.0,
+    "design_goal_agreement_score": 0.2857142857142857,
+    "granularity": "aggregate_only"
+  },
+  {
+    "benchmark_id": "math_500",
+    "primary_cluster": "cluster_0",
+    "discrimination_profile": {
+      "f0": 0.636063098087585,
+      "f1": 0.03674248755899643,
+      "f2": 0.25031892378101683,
+      "f3": 0.0462235377935785,
+      "f4": 0.03065195277882326
+    },
+    "factor_loadings": [
+      0.8524205856810546,
+      0.04924048079284404,
+      -0.33546515158325363,
+      0.061946519577570205,
+      0.04107824462470972
+    ],
+    "coverage_breadth_score": 0.6243211006006664,
+    "reliability_score": 0.8471071412375396,
+    "saturated_flag": true,
+    "scoring_method": "rule_verified",
+    "design_goal_tags": [
+      "math",
+      "reasoning"
+    ],
+    "design_goal_agreement_score": 0.4,
     "granularity": "aggregate_only"
   },
   {
     "benchmark_id": "mmlu",
     "primary_cluster": "cluster_1",
     "discrimination_profile": {
-      "f0": 0.27334105244220736,
-      "f1": 0.6065615285172089,
-      "f2": 0.12009741904058362
+      "f0": 0.5989203760026551,
+      "f1": 0.024249692472663377,
+      "f2": 0.13042649466316825,
+      "f3": 0.10108128475415723,
+      "f4": 0.14532215210735613
     },
-    "coverage_breadth_score": 0.8304326579362061,
-    "reliability_score": 0.23132468542236664,
+    "factor_loadings": [
+      0.9415804870049748,
+      0.038123660778624155,
+      0.20504736069081958,
+      -0.15891288581820762,
+      0.22846526556185962
+    ],
+    "coverage_breadth_score": 0.7299729594802606,
+    "reliability_score": 1.0,
     "saturated_flag": false,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
@@ -203,64 +441,174 @@
       "reading_comprehension",
       "reasoning"
     ],
-    "design_goal_agreement_score": 0.0,
+    "design_goal_agreement_score": 0.42857142857142855,
     "granularity": "aggregate_only"
   },
   {
     "benchmark_id": "mmlu_pro",
     "primary_cluster": "cluster_0",
     "discrimination_profile": {
-      "f0": 0.5301718920378828,
-      "f1": 0.2521314906405835,
-      "f2": 0.21769661732153367
+      "f0": 0.776228424940326,
+      "f1": 0.02766745638144381,
+      "f2": 0.1827355361645358,
+      "f3": 0.0015942779112610732,
+      "f4": 0.011774304602433337
     },
-    "coverage_breadth_score": 0.9245503492235616,
-    "reliability_score": 0.12158411049881568,
+    "factor_loadings": [
+      0.9602815008453742,
+      -0.03422774235636797,
+      -0.22606432499473952,
+      0.001972300338663979,
+      -0.014566133539756037
+    ],
+    "coverage_breadth_score": 0.4157037421661586,
+    "reliability_score": 0.9746332404629096,
     "saturated_flag": false,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
       "world_knowledge",
       "reasoning"
     ],
-    "design_goal_agreement_score": 0.0,
+    "design_goal_agreement_score": 0.4,
+    "granularity": "aggregate_only"
+  },
+  {
+    "benchmark_id": "mmmlu",
+    "primary_cluster": "cluster_4",
+    "discrimination_profile": {
+      "f0": 0.34722796488656216,
+      "f1": 0.3365322586470148,
+      "f2": 0.020212570457787744,
+      "f3": 0.18492356629916518,
+      "f4": 0.11110363970947024
+    },
+    "factor_loadings": [
+      0.8047154006205967,
+      -0.7799276519313761,
+      0.04684348145410616,
+      -0.42856813617312767,
+      0.25748735407420764
+    ],
+    "coverage_breadth_score": 0.8505420884674809,
+    "reliability_score": 1.0,
+    "saturated_flag": false,
+    "scoring_method": "rule_verified",
+    "design_goal_tags": [
+      "vision",
+      "world_knowledge"
+    ],
+    "design_goal_agreement_score": 1.0,
+    "granularity": "aggregate_only"
+  },
+  {
+    "benchmark_id": "simpleqa",
+    "primary_cluster": "cluster_1",
+    "discrimination_profile": {
+      "f0": 0.5387684744556245,
+      "f1": 0.009326903667761803,
+      "f2": 0.12546318909557783,
+      "f3": 0.15845144936685318,
+      "f4": 0.16798998341418273
+    },
+    "factor_loadings": [
+      0.8439910431696509,
+      -0.014610771656695158,
+      0.1965404675007381,
+      -0.2482172034620194,
+      -0.2631594981258805
+    ],
+    "coverage_breadth_score": 0.7635139590288994,
+    "reliability_score": 0.882027212512779,
+    "saturated_flag": false,
+    "scoring_method": "rule_verified",
+    "design_goal_tags": [
+      "factuality"
+    ],
+    "design_goal_agreement_score": 0.14285714285714285,
     "granularity": "aggregate_only"
   },
   {
     "benchmark_id": "swe_bench",
     "primary_cluster": "cluster_2",
     "discrimination_profile": {
-      "f0": 0.27029038055938337,
-      "f1": 0.16597369882756832,
-      "f2": 0.5637359206130483
+      "f0": 0.365812357944611,
+      "f1": 0.19422950834273733,
+      "f2": 0.15085513444808413,
+      "f3": 0.15968168435260116,
+      "f4": 0.12942131491196623
     },
-    "coverage_breadth_score": 0.8873032870640186,
-    "reliability_score": 0.3800774116004527,
+    "factor_loadings": [
+      0.7601490928066572,
+      -0.403604146652066,
+      -0.313473263287897,
+      0.3318146171454592,
+      0.2689343128617646
+    ],
+    "coverage_breadth_score": 0.9500622873121665,
+    "reliability_score": 1.0,
     "saturated_flag": false,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
       "code",
       "agentic_tool_use"
     ],
-    "design_goal_agreement_score": 0.0,
+    "design_goal_agreement_score": 0.5,
     "granularity": "aggregate_only"
   },
   {
     "benchmark_id": "tau2_bench",
     "primary_cluster": "cluster_2",
     "discrimination_profile": {
-      "f0": 0.28505240444601215,
-      "f1": 0.16453085243909377,
-      "f2": 0.5504167431148942
+      "f0": 0.5285480235317218,
+      "f1": 0.10780785524255809,
+      "f2": 0.19665732281154005,
+      "f3": 0.05607559330827551,
+      "f4": 0.1109112051059046
     },
-    "coverage_breadth_score": 0.8950642529382599,
-    "reliability_score": 0.3639301091323586,
+    "factor_loadings": [
+      0.8004347633602249,
+      -0.16326454978082294,
+      -0.29781845856862443,
+      0.08492105213084743,
+      0.16796427242266282
+    ],
+    "coverage_breadth_score": 0.8092397337018999,
+    "reliability_score": 0.7914705397803501,
     "saturated_flag": false,
     "scoring_method": "rule_verified",
     "design_goal_tags": [
       "agentic_tool_use",
       "instruction_following"
     ],
-    "design_goal_agreement_score": 0.0,
+    "design_goal_agreement_score": 0.5,
+    "granularity": "aggregate_only"
+  },
+  {
+    "benchmark_id": "terminal_bench",
+    "primary_cluster": "cluster_3",
+    "discrimination_profile": {
+      "f0": 0.2526248144376921,
+      "f1": 0.3114614193644012,
+      "f2": 0.1519441718304956,
+      "f3": 0.2733534467514035,
+      "f4": 0.010616147616007652
+    },
+    "factor_loadings": [
+      0.5167105715459589,
+      0.6370530479063005,
+      -0.31078166269757684,
+      0.5591082412840818,
+      -0.021713922737532705
+    ],
+    "coverage_breadth_score": 0.8698551631089758,
+    "reliability_score": 1.0,
+    "saturated_flag": false,
+    "scoring_method": "rule_verified",
+    "design_goal_tags": [
+      "code",
+      "agentic_tool_use"
+    ],
+    "design_goal_agreement_score": 1.0,
     "granularity": "aggregate_only"
   }
 ]

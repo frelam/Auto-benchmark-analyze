@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -63,6 +64,48 @@ def test_render_results_summary_contains_sections() -> None:
     assert "![fig_curves_mmlu.png](figures/fig_curves_mmlu.png)" in summary
 
 
+def test_cluster_map_embedding_uses_direction_not_magnitude() -> None:
+    """Regression: the cluster map must not separate correlated benchmarks.
+
+    Two benchmarks with identical loading *direction* but very different loading
+    *magnitudes* are perfectly correlated and must land on the same map point.
+    The old embedding (PCA on the abs/sum-normalized profile) pushed the
+    strong-on-f0 benchmark far from a correlated weaker one — the bug that made
+    math and gsm8k appear distant despite a 0.74 Spearman correlation.
+    """
+    from benchmark_diagnosis.reporting.visualize import _embed_cluster_map
+
+    rows = [
+        {"benchmark_id": "math_a", "primary_cluster": "c0",
+         "factor_loadings": [0.9, 0.0, 0.0, 0.0, 0.0]},
+        {"benchmark_id": "math_b", "primary_cluster": "c0",
+         "factor_loadings": [0.45, 0.0, 0.0, 0.0, 0.0]},  # same direction, half magnitude
+        {"benchmark_id": "code", "primary_cluster": "c1",
+         "factor_loadings": [0.0, 0.9, 0.0, 0.0, 0.0]},
+    ]
+    coords = _embed_cluster_map(rows)
+    by = {r["benchmark_id"]: coords[i] for i, r in enumerate(rows)}
+    d_same = float(np.linalg.norm(by["math_a"] - by["math_b"]))
+    d_diff = float(np.linalg.norm(by["math_a"] - by["code"]))
+    assert d_same < 0.01   # identical direction -> identical normalized position
+    assert d_same < d_diff
+
+
+def test_cluster_map_embedding_falls_back_to_profile() -> None:
+    """Without factor_loadings the map still renders from discrimination_profile."""
+    from benchmark_diagnosis.reporting.visualize import _embed_cluster_map
+
+    rows = [
+        {"benchmark_id": "a", "primary_cluster": "c0",
+         "discrimination_profile": {"f0": 0.8, "f1": 0.2}},
+        {"benchmark_id": "b", "primary_cluster": "c1",
+         "discrimination_profile": {"f0": 0.2, "f1": 0.8}},
+    ]
+    coords = _embed_cluster_map(rows)
+    assert coords.shape == (2, 2)
+    assert np.all(np.isfinite(coords))
+
+
 def test_cluster_capability_labels() -> None:
     from benchmark_diagnosis.reporting.report_generator import cluster_capability_labels
 
@@ -103,6 +146,13 @@ def test_render_figures_write_png(tmp_path) -> None:
     written = visualize.render_cluster_map(_coverage(), tmp_path)
     assert written and written[0].exists()
 
-    scores = pd.DataFrame({"mmlu": [0.66, 0.70, 0.68], "gsm8k": [0.79, 0.80, 0.82]})
+    rng = np.random.default_rng(0)
+    scores = pd.DataFrame(
+        {
+            "mmlu": rng.uniform(0.40, 0.95, size=20),
+            "gsm8k": rng.uniform(0.20, 0.98, size=20),
+            "math": rng.uniform(0.05, 0.95, size=20),
+        }
+    )
     written = visualize.render_correlation(scores, tmp_path)
     assert written and written[0].exists()

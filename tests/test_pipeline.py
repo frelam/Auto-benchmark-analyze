@@ -38,7 +38,10 @@ def test_build_offline_and_diagnose(seeded_session):
         total_params=8.0,
         active_params=8.0,
     )
-    raw_scores = {"mmlu": 66.6, "gsm8k": 79.6, "humaneval": 33.4}
+    # Include scores that overlap the current representative portfolios (math in
+    # the general cluster, swe_bench in the code cluster) so cluster verdicts
+    # actually render; scores only count when their benchmark is in a portfolio.
+    raw_scores = {"mmlu": 66.6, "math": 55.0, "swe_bench": 18.0}
     report = diagnose_model(session, model, raw_scores, settings)
 
     assert report["model"]["model_id"] == "llama-3-8b"

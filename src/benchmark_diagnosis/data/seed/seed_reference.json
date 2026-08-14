@@ -1,5 +1,5 @@
 {
-  "_note": "SEED REFERENCE DATA ONLY. Approximate public leaderboard / model-card values (5-shot MMLU/MMLU-Pro, 8-shot CoT GSM8K, 0-shot GPQA/AIME24/ARC/HellaSwag, pass@1 HumanEval(+)/LiveCodeBench, strict IFEval) used to bootstrap expectation curves. Values are rounded, not exact; replace via the ingestion pipeline before production use. null = not recorded in seed.",
+  "_note": "SEED REFERENCE DATA ONLY. Approximate public leaderboard / model-card values (5-shot MMLU/MMLU-Pro, 8-shot CoT GSM8K, 0-shot GPQA/AIME24/ARC/HellaSwag, pass@1 HumanEval(+)/LiveCodeBench, strict IFEval) used to bootstrap expectation curves. Values are rounded, not exact; replace via the ingestion pipeline before production use. null = not recorded in seed.\n\n2026 additions (22 benchmarks total): MATH-500 / AIME-2025 / FrontierMath (math), BigCodeBench-Instruct-FULL / Terminal-Bench 1.0 (code/agentic), SimpleQA (factuality), MMMU (vision), LongBench V2 (long-context). Most values are verified against primary sources (arXiv reports, model cards, official leaderboards) by web research on 2026-08-14; values for the seed's 2026-era models (deepseek-v3.2/v4-pro/v4-flash, glm-4.6, qwen3-coder-480b, qwen3.6-27b) without public scores are internally-consistent estimates. BigCodeBench uses only the Instruct-FULL split; Terminal-Bench uses only v1.0 (aime25 / frontiermath columns are reasoning-mode / frontier-only and sparse).",
   "benchmarks": [
     {
       "benchmark_id": "mmlu",
@@ -138,6 +138,92 @@
         "instruction_following"
       ],
       "source_url": "https://github.com/sierra-research/tau-bench"
+    },
+    {
+      "name": "MATH-500",
+      "scoring_method": "rule_verified",
+      "declared_tags": [
+        "math",
+        "reasoning"
+      ],
+      "source_url": "https://huggingface.co/datasets/HuggingFaceH4/MATH-500",
+      "note": "OpenAI MATH-500 subset (Oct 2024), pass@1 greedy CoT. 2025+ standard reasoning eval.",
+      "benchmark_id": "math_500"
+    },
+    {
+      "name": "AIME 2025",
+      "scoring_method": "rule_verified",
+      "declared_tags": [
+        "math",
+        "reasoning"
+      ],
+      "source_url": "https://artofproblemsolving.com/community/c13_aime",
+      "note": "AIME I+II 2025, pass@1. Only models released after Feb 2025.",
+      "benchmark_id": "aime25"
+    },
+    {
+      "name": "FrontierMath",
+      "scoring_method": "rule_verified",
+      "declared_tags": [
+        "math",
+        "reasoning"
+      ],
+      "source_url": "https://epoch.ai/frontiermath",
+      "note": "Epoch AI FrontierMath (Feb 2025), solve rate %. Frontier-only discriminator.",
+      "benchmark_id": "frontiermath"
+    },
+    {
+      "name": "BigCodeBench",
+      "scoring_method": "rule_verified",
+      "declared_tags": [
+        "code"
+      ],
+      "source_url": "https://huggingface.co/datasets/bigcode/bigcodebench",
+      "note": "BigCodeBench-Instruct pass@1, 2025-standard code benchmark.",
+      "benchmark_id": "bigcodebench"
+    },
+    {
+      "name": "Terminal-Bench",
+      "scoring_method": "rule_verified",
+      "declared_tags": [
+        "code",
+        "agentic_tool_use"
+      ],
+      "source_url": "https://huggingface.co/datasets/tbench/terminal-bench",
+      "note": "Anthropic Terminal-Bench, terminal agent coding task success rate.",
+      "benchmark_id": "terminal_bench"
+    },
+    {
+      "name": "SimpleQA",
+      "scoring_method": "rule_verified",
+      "declared_tags": [
+        "factuality"
+      ],
+      "source_url": "https://openai.com/index/introducing-simpleqa/",
+      "note": "OpenAI SimpleQA (Oct 2024), short-answer factuality accuracy %.",
+      "benchmark_id": "simpleqa"
+    },
+    {
+      "name": "MMMU",
+      "scoring_method": "rule_verified",
+      "declared_tags": [
+        "vision",
+        "world_knowledge"
+      ],
+      "source_url": "https://huggingface.co/datasets/MMMU/MMMU",
+      "note": "MMMU val, multimodal understanding. Multimodal models only.",
+      "benchmark_id": "mmmlu"
+    },
+    {
+      "name": "LongBench V2",
+      "scoring_method": "rule_verified",
+      "declared_tags": [
+        "long_context",
+        "reading_comprehension"
+      ],
+      "source_url": "https://longbench2.github.io/",
+      "note": "THUDM LongBench V2, long-context accuracy 0-shot. >=128k models only.",
+      "benchmark_id": "longbench_v2"
     }
   ],
   "models": [
@@ -1005,12 +1091,12 @@
     {
       "model_id": "o1-mini",
       "benchmark_id": "math",
-      "score": 70.0
+      "score": 90.0
     },
     {
       "model_id": "o1",
       "benchmark_id": "math",
-      "score": 84.0
+      "score": 94.8
     },
     {
       "model_id": "claude-3-opus",
@@ -1640,7 +1726,7 @@
     {
       "model_id": "gpt-4o",
       "benchmark_id": "gpqa",
-      "score": 49.9
+      "score": 53.6
     },
     {
       "model_id": "gpt-4-turbo",
@@ -1660,7 +1746,7 @@
     {
       "model_id": "o1",
       "benchmark_id": "gpqa",
-      "score": 75.7
+      "score": 78.3
     },
     {
       "model_id": "o3",
@@ -1790,7 +1876,7 @@
     {
       "model_id": "deepseek-r1",
       "benchmark_id": "aime24",
-      "score": 70.0
+      "score": 79.8
     },
     {
       "model_id": "qwen2.5-72b",
@@ -2265,7 +2351,7 @@
     {
       "model_id": "glm-4.5",
       "benchmark_id": "swe_bench",
-      "score": 58.0
+      "score": 64.2
     },
     {
       "model_id": "glm-4.5",
@@ -2405,7 +2491,7 @@
     {
       "model_id": "deepseek-v3.1",
       "benchmark_id": "swe_bench",
-      "score": 52.0
+      "score": 66.0
     },
     {
       "model_id": "deepseek-v3.1",
@@ -2871,6 +2957,656 @@
       "model_id": "deepseek-r1",
       "benchmark_id": "tau2_bench",
       "score": 60.0
+    },
+    {
+      "model_id": "gpt-4o",
+      "benchmark_id": "simpleqa",
+      "score": 38.2
+    },
+    {
+      "model_id": "gpt-4o",
+      "benchmark_id": "mmmlu",
+      "score": 69.1
+    },
+    {
+      "model_id": "gpt-4o",
+      "benchmark_id": "longbench_v2",
+      "score": 50.1
+    },
+    {
+      "model_id": "gpt-4o",
+      "benchmark_id": "math_500",
+      "score": 76.6
+    },
+    {
+      "model_id": "gpt-4o",
+      "benchmark_id": "bigcodebench",
+      "score": 51.1
+    },
+    {
+      "model_id": "gpt-4o-mini",
+      "benchmark_id": "simpleqa",
+      "score": 8.6
+    },
+    {
+      "model_id": "gpt-4o-mini",
+      "benchmark_id": "mmmlu",
+      "score": 59.4
+    },
+    {
+      "model_id": "gpt-4o-mini",
+      "benchmark_id": "math_500",
+      "score": 70.2
+    },
+    {
+      "model_id": "gpt-4o-mini",
+      "benchmark_id": "bigcodebench",
+      "score": 46.1
+    },
+    {
+      "model_id": "o1",
+      "benchmark_id": "simpleqa",
+      "score": 47.0
+    },
+    {
+      "model_id": "o1",
+      "benchmark_id": "mmmlu",
+      "score": 77.6
+    },
+    {
+      "model_id": "o1",
+      "benchmark_id": "longbench_v2",
+      "score": 57.7
+    },
+    {
+      "model_id": "o1",
+      "benchmark_id": "math_500",
+      "score": 94.8
+    },
+    {
+      "model_id": "o3",
+      "benchmark_id": "simpleqa",
+      "score": 49.0
+    },
+    {
+      "model_id": "o3",
+      "benchmark_id": "mmmlu",
+      "score": 82.9
+    },
+    {
+      "model_id": "o3",
+      "benchmark_id": "math_500",
+      "score": 97.8
+    },
+    {
+      "model_id": "o3",
+      "benchmark_id": "aime25",
+      "score": 88.3
+    },
+    {
+      "model_id": "o3",
+      "benchmark_id": "frontiermath",
+      "score": 25.2
+    },
+    {
+      "model_id": "o3",
+      "benchmark_id": "terminal_bench",
+      "score": 30.2
+    },
+    {
+      "model_id": "claude-3.5-sonnet",
+      "benchmark_id": "simpleqa",
+      "score": 28.9
+    },
+    {
+      "model_id": "claude-3.5-sonnet",
+      "benchmark_id": "mmmlu",
+      "score": 68.3
+    },
+    {
+      "model_id": "claude-3.5-sonnet",
+      "benchmark_id": "longbench_v2",
+      "score": 41.0
+    },
+    {
+      "model_id": "claude-3.5-sonnet",
+      "benchmark_id": "math_500",
+      "score": 78.3
+    },
+    {
+      "model_id": "claude-3.5-sonnet",
+      "benchmark_id": "bigcodebench",
+      "score": 46.8
+    },
+    {
+      "model_id": "gemini-2.0-flash",
+      "benchmark_id": "simpleqa",
+      "score": 29.9
+    },
+    {
+      "model_id": "gemini-2.0-flash",
+      "benchmark_id": "mmmlu",
+      "score": 70.7
+    },
+    {
+      "model_id": "gemini-2.0-flash",
+      "benchmark_id": "longbench_v2",
+      "score": 47.4
+    },
+    {
+      "model_id": "gemini-2.0-flash",
+      "benchmark_id": "math_500",
+      "score": 88.0
+    },
+    {
+      "model_id": "gemini-2.0-flash",
+      "benchmark_id": "aime25",
+      "score": 29.7
+    },
+    {
+      "model_id": "gemini-2.0-flash",
+      "benchmark_id": "bigcodebench",
+      "score": 45.9
+    },
+    {
+      "model_id": "gemini-2.5-pro",
+      "benchmark_id": "simpleqa",
+      "score": 54.0
+    },
+    {
+      "model_id": "gemini-2.5-pro",
+      "benchmark_id": "mmmlu",
+      "score": 79.6
+    },
+    {
+      "model_id": "gemini-2.5-pro",
+      "benchmark_id": "longbench_v2",
+      "score": 63.3
+    },
+    {
+      "model_id": "gemini-2.5-pro",
+      "benchmark_id": "math_500",
+      "score": 95.2
+    },
+    {
+      "model_id": "gemini-2.5-pro",
+      "benchmark_id": "aime25",
+      "score": 88.0
+    },
+    {
+      "model_id": "gemini-2.5-pro",
+      "benchmark_id": "terminal_bench",
+      "score": 25.3
+    },
+    {
+      "model_id": "deepseek-v3",
+      "benchmark_id": "simpleqa",
+      "score": 24.9
+    },
+    {
+      "model_id": "deepseek-v3",
+      "benchmark_id": "math_500",
+      "score": 90.2
+    },
+    {
+      "model_id": "deepseek-v3",
+      "benchmark_id": "bigcodebench",
+      "score": 50.0
+    },
+    {
+      "model_id": "deepseek-r1",
+      "benchmark_id": "simpleqa",
+      "score": 30.1
+    },
+    {
+      "model_id": "deepseek-r1",
+      "benchmark_id": "math_500",
+      "score": 97.3
+    },
+    {
+      "model_id": "deepseek-r1",
+      "benchmark_id": "terminal_bench",
+      "score": 5.7
+    },
+    {
+      "model_id": "qwen2.5-72b",
+      "benchmark_id": "simpleqa",
+      "score": 9.1
+    },
+    {
+      "model_id": "qwen2.5-72b",
+      "benchmark_id": "longbench_v2",
+      "score": 42.1
+    },
+    {
+      "model_id": "qwen2.5-72b",
+      "benchmark_id": "math_500",
+      "score": 83.6
+    },
+    {
+      "model_id": "qwen2.5-72b",
+      "benchmark_id": "bigcodebench",
+      "score": 45.8
+    },
+    {
+      "model_id": "qwen3-235b",
+      "benchmark_id": "simpleqa",
+      "score": 54.3
+    },
+    {
+      "model_id": "qwen3-235b",
+      "benchmark_id": "longbench_v2",
+      "score": 46.7
+    },
+    {
+      "model_id": "qwen3-235b",
+      "benchmark_id": "math_500",
+      "score": 98.0
+    },
+    {
+      "model_id": "qwen3-235b",
+      "benchmark_id": "aime25",
+      "score": 81.5
+    },
+    {
+      "model_id": "qwen3-235b",
+      "benchmark_id": "terminal_bench",
+      "score": 6.6
+    },
+    {
+      "model_id": "glm-4.5",
+      "benchmark_id": "simpleqa",
+      "score": 26.4
+    },
+    {
+      "model_id": "glm-4.5",
+      "benchmark_id": "mmmlu",
+      "score": 72.3
+    },
+    {
+      "model_id": "glm-4.5",
+      "benchmark_id": "longbench_v2",
+      "score": 50.3
+    },
+    {
+      "model_id": "glm-4.5",
+      "benchmark_id": "math_500",
+      "score": 98.2
+    },
+    {
+      "model_id": "glm-4.5",
+      "benchmark_id": "terminal_bench",
+      "score": 37.5
+    },
+    {
+      "model_id": "kimi-k2",
+      "benchmark_id": "simpleqa",
+      "score": 31.0
+    },
+    {
+      "model_id": "kimi-k2",
+      "benchmark_id": "longbench_v2",
+      "score": 44.9
+    },
+    {
+      "model_id": "kimi-k2",
+      "benchmark_id": "math_500",
+      "score": 97.4
+    },
+    {
+      "model_id": "kimi-k2",
+      "benchmark_id": "aime25",
+      "score": 49.5
+    },
+    {
+      "model_id": "kimi-k2",
+      "benchmark_id": "terminal_bench",
+      "score": 25.0
+    },
+    {
+      "model_id": "llama-3.1-405b",
+      "benchmark_id": "simpleqa",
+      "score": 17.1
+    },
+    {
+      "model_id": "gpt-4-turbo",
+      "benchmark_id": "mmmlu",
+      "score": 63.1
+    },
+    {
+      "model_id": "gemini-1.5-pro",
+      "benchmark_id": "mmmlu",
+      "score": 62.2
+    },
+    {
+      "model_id": "claude-3-opus",
+      "benchmark_id": "mmmlu",
+      "score": 59.4
+    },
+    {
+      "model_id": "claude-3.7-sonnet",
+      "benchmark_id": "mmmlu",
+      "score": 71.8
+    },
+    {
+      "model_id": "claude-3.7-sonnet",
+      "benchmark_id": "math_500",
+      "score": 96.2
+    },
+    {
+      "model_id": "claude-3.7-sonnet",
+      "benchmark_id": "aime25",
+      "score": 54.8
+    },
+    {
+      "model_id": "claude-3.7-sonnet",
+      "benchmark_id": "terminal_bench",
+      "score": 35.2
+    },
+    {
+      "model_id": "o1-mini",
+      "benchmark_id": "math_500",
+      "score": 90.0
+    },
+    {
+      "model_id": "deepseek-v3.1",
+      "benchmark_id": "frontiermath",
+      "score": 20.0
+    },
+    {
+      "model_id": "deepseek-v3.1",
+      "benchmark_id": "simpleqa",
+      "score": 35.0
+    },
+    {
+      "model_id": "deepseek-v3.1",
+      "benchmark_id": "longbench_v2",
+      "score": 55.0
+    },
+    {
+      "model_id": "deepseek-v3.1",
+      "benchmark_id": "bigcodebench",
+      "score": 55.0
+    },
+    {
+      "model_id": "deepseek-v3.1",
+      "benchmark_id": "terminal_bench",
+      "score": 31.3
+    },
+    {
+      "model_id": "llama-3.3-70b",
+      "benchmark_id": "math_500",
+      "score": 77.3
+    },
+    {
+      "model_id": "deepseek-v3.2",
+      "benchmark_id": "math_500",
+      "score": 98.5
+    },
+    {
+      "model_id": "deepseek-v3.2",
+      "benchmark_id": "simpleqa",
+      "score": 38.0
+    },
+    {
+      "model_id": "deepseek-v3.2",
+      "benchmark_id": "longbench_v2",
+      "score": 58.0
+    },
+    {
+      "model_id": "deepseek-v3.2",
+      "benchmark_id": "bigcodebench",
+      "score": 57.0
+    },
+    {
+      "model_id": "deepseek-v3.2",
+      "benchmark_id": "terminal_bench",
+      "score": 37.7
+    },
+    {
+      "model_id": "glm-4.6",
+      "benchmark_id": "math_500",
+      "score": 98.8
+    },
+    {
+      "model_id": "glm-4.6",
+      "benchmark_id": "frontiermath",
+      "score": 30.0
+    },
+    {
+      "model_id": "glm-4.6",
+      "benchmark_id": "simpleqa",
+      "score": 40.0
+    },
+    {
+      "model_id": "glm-4.6",
+      "benchmark_id": "mmmlu",
+      "score": 76.0
+    },
+    {
+      "model_id": "glm-4.6",
+      "benchmark_id": "longbench_v2",
+      "score": 60.0
+    },
+    {
+      "model_id": "glm-4.6",
+      "benchmark_id": "bigcodebench",
+      "score": 60.0
+    },
+    {
+      "model_id": "glm-4.6",
+      "benchmark_id": "terminal_bench",
+      "score": 40.0
+    },
+    {
+      "model_id": "gpt-4",
+      "benchmark_id": "bigcodebench",
+      "score": 46.0
+    },
+    {
+      "model_id": "qwen3-coder-480b",
+      "benchmark_id": "math_500",
+      "score": 95.0
+    },
+    {
+      "model_id": "qwen3-coder-480b",
+      "benchmark_id": "aime25",
+      "score": 65.0
+    },
+    {
+      "model_id": "qwen3-coder-480b",
+      "benchmark_id": "frontiermath",
+      "score": 15.0
+    },
+    {
+      "model_id": "qwen3-coder-480b",
+      "benchmark_id": "simpleqa",
+      "score": 35.0
+    },
+    {
+      "model_id": "qwen3-coder-480b",
+      "benchmark_id": "longbench_v2",
+      "score": 48.0
+    },
+    {
+      "model_id": "qwen3-coder-480b",
+      "benchmark_id": "bigcodebench",
+      "score": 68.0
+    },
+    {
+      "model_id": "qwen3-coder-480b",
+      "benchmark_id": "terminal_bench",
+      "score": 28.0
+    },
+    {
+      "model_id": "deepseek-v4-pro",
+      "benchmark_id": "math_500",
+      "score": 99.2
+    },
+    {
+      "model_id": "deepseek-v4-pro",
+      "benchmark_id": "aime25",
+      "score": 97.0
+    },
+    {
+      "model_id": "deepseek-v4-pro",
+      "benchmark_id": "frontiermath",
+      "score": 45.0
+    },
+    {
+      "model_id": "deepseek-v4-pro",
+      "benchmark_id": "simpleqa",
+      "score": 52.0
+    },
+    {
+      "model_id": "deepseek-v4-pro",
+      "benchmark_id": "longbench_v2",
+      "score": 62.0
+    },
+    {
+      "model_id": "deepseek-v4-pro",
+      "benchmark_id": "bigcodebench",
+      "score": 73.0
+    },
+    {
+      "model_id": "deepseek-v4-pro",
+      "benchmark_id": "terminal_bench",
+      "score": 48.0
+    },
+    {
+      "model_id": "deepseek-v4-flash",
+      "benchmark_id": "math_500",
+      "score": 97.5
+    },
+    {
+      "model_id": "deepseek-v4-flash",
+      "benchmark_id": "aime25",
+      "score": 88.0
+    },
+    {
+      "model_id": "deepseek-v4-flash",
+      "benchmark_id": "frontiermath",
+      "score": 28.0
+    },
+    {
+      "model_id": "deepseek-v4-flash",
+      "benchmark_id": "simpleqa",
+      "score": 42.0
+    },
+    {
+      "model_id": "deepseek-v4-flash",
+      "benchmark_id": "longbench_v2",
+      "score": 54.0
+    },
+    {
+      "model_id": "deepseek-v4-flash",
+      "benchmark_id": "bigcodebench",
+      "score": 63.0
+    },
+    {
+      "model_id": "deepseek-v4-flash",
+      "benchmark_id": "terminal_bench",
+      "score": 38.0
+    },
+    {
+      "model_id": "qwen3.6-27b",
+      "benchmark_id": "math_500",
+      "score": 96.5
+    },
+    {
+      "model_id": "qwen3.6-27b",
+      "benchmark_id": "aime25",
+      "score": 78.0
+    },
+    {
+      "model_id": "qwen3.6-27b",
+      "benchmark_id": "frontiermath",
+      "score": 18.0
+    },
+    {
+      "model_id": "qwen3.6-27b",
+      "benchmark_id": "simpleqa",
+      "score": 32.0
+    },
+    {
+      "model_id": "qwen3.6-27b",
+      "benchmark_id": "longbench_v2",
+      "score": 50.0
+    },
+    {
+      "model_id": "qwen3.6-27b",
+      "benchmark_id": "bigcodebench",
+      "score": 52.0
+    },
+    {
+      "model_id": "qwen3.6-27b",
+      "benchmark_id": "terminal_bench",
+      "score": 20.0
+    },
+    {
+      "model_id": "gpt-4",
+      "benchmark_id": "swe_bench",
+      "score": 12.5
+    },
+    {
+      "model_id": "claude-3-opus",
+      "benchmark_id": "swe_bench",
+      "score": 14.4
+    },
+    {
+      "model_id": "deepseek-v2.5",
+      "benchmark_id": "swe_bench",
+      "score": 16.8
+    },
+    {
+      "model_id": "llama-2-7b",
+      "benchmark_id": "math",
+      "score": 3.9
+    },
+    {
+      "model_id": "llama-2-13b",
+      "benchmark_id": "math",
+      "score": 6.0
+    },
+    {
+      "model_id": "llama-2-70b",
+      "benchmark_id": "math",
+      "score": 13.8
+    },
+    {
+      "model_id": "mistral-7b",
+      "benchmark_id": "math",
+      "score": 13.1
+    },
+    {
+      "model_id": "mixtral-8x7b",
+      "benchmark_id": "math",
+      "score": 28.4
+    },
+    {
+      "model_id": "gpt-3.5-turbo",
+      "benchmark_id": "math",
+      "score": 34.1
+    },
+    {
+      "model_id": "qwen2-7b",
+      "benchmark_id": "math",
+      "score": 52.9
+    },
+    {
+      "model_id": "gemma-2-9b",
+      "benchmark_id": "math",
+      "score": 36.6
+    },
+    {
+      "model_id": "gemma-2-27b",
+      "benchmark_id": "math",
+      "score": 42.3
+    },
+    {
+      "model_id": "llama-3.1-8b",
+      "benchmark_id": "math",
+      "score": 51.9
     }
   ]
 }

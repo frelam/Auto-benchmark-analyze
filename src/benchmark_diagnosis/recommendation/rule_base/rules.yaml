@@ -188,3 +188,33 @@ rules:
       提升意图理解与格式遵从。
     source_type: internal_validated
     evidence_strength: medium
+
+  - rule_id: R-factuality-001
+    title: 事实性短板：事实核查与引用溯源训练
+    applicable_tags: [factuality]
+    category: data_mix
+    description: >-
+      提高含证据链、引用溯源、事实核查的语料与 SFT 样本配比，配合"不确定即声明
+      不确定"的拒答 / 反事实样本，抑制幻觉，提升短问答事实准确率。
+    source_type: internal_validated
+    evidence_strength: high
+
+  - rule_id: R-vision-001
+    title: 多模态视觉理解短板：增强图文对齐与视觉指令数据
+    applicable_tags: [vision]
+    category: data_mix
+    description: >-
+      增加高质量图文配对与视觉指令（VQA / OCR / 图表理解 / 屏幕理解）数据，
+      配合跨模态对齐训练，改善多模态模型对视觉输入的细粒度理解。
+    source_type: external_paper
+    evidence_strength: medium
+
+  - rule_id: R-longctx-001
+    title: 长上下文短板：长上下文训练与位置编码外推
+    applicable_tags: [long_context]
+    category: algorithm
+    description: >-
+      对长上下文任务采用 RoPE 外推 / 位置内插 / 长上下文继续预训练，并构造
+      长文档信息定位与长链推理样本，改善长输入下的信息利用。
+    source_type: external_paper
+    evidence_strength: medium

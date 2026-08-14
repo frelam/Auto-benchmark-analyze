@@ -46,7 +46,15 @@
 
 ![能力聚类](results/figures/fig_cluster_map.png)
 
-> 图中空间距离 = 各 benchmark 分数在 48 个模型上的协同变化程度。落在同一簇的 benchmark 测的是**相关能力**——训练时往往一起提升（可迁移 / 共训）。例如 `agentic_tool_use` 与 `code`、`instruction_following` 聚成一簇，`math`/`reasoning`/`world_knowledge` 聚成另一簇。
+> 空间距离 = 各 benchmark 分数在 48 个模型上的**协同变化程度**（pairwise-complete 秩相关 → 特征分解 → KMeans）。落点来自**单位化因子载荷**的二维投影：距离近似反映两两相关，而不是单个 benchmark 在主导因子上的载荷强度（修正了早前版本"高相关任务被载荷强度拉远"的问题）。同簇 = 训练时往往一起提升（可迁移 / 共训）。当前 5 簇：
+>
+> - **前沿数学 / 强推理**：AIME 2024/2025、FrontierMath、GPQA、LongBench V2、MATH-500、MMLU-Pro；
+> - **通用知识 / 中等数学**：ARC-Challenge、GSM8K、Hellaswag、IFEval、MATH、MMLU、SimpleQA —— `math` 与 `gsm8k` 同簇（Spearman ρ ≈ 0.74）；
+> - **代码 / agentic**：BigCodeBench、HumanEval(+)、LiveCodeBench、SWE-bench、τ²-bench —— `livecodebench` 与 `swe_bench` 同簇（ρ ≈ 0.85）；
+> - **终端 agentic**：Terminal-Bench（独立簇）；
+> - **多模态**：MMMU（独立簇）。
+>
+> 已补充 2026 主流数据集：AIME 2025、FrontierMath、MATH-500、BigCodeBench（仅 Instruct-FULL 难度档）、Terminal-Bench（仅 v1.0）、SimpleQA、MMMU、LongBench V2。分数 provenance 在 seed 的 `_note` 中标注为 `verified`（已核对）或 `estimated`（按同模型已知排位标定）。
 
 ### 各 benchmark 的 SOTA 前沿（时间维度）
 
@@ -86,7 +94,7 @@ pip install -e ".[dev]"          # 开发依赖（pytest / ruff）
 ## 快速开始（30 秒）
 
 ```bash
-# 1. 载入 seed 参考数据（48 个模型 × 14 个 benchmark，公开 leaderboard 近似值）
+# 1. 载入 seed 参考数据（48 个模型 × 22 个 benchmark，公开 leaderboard 近似值）
 benchmark-diagnosis ingest --seed
 
 # 2. 离线构建：能力覆盖表 + 代表性组合 + 预期曲线
@@ -127,9 +135,9 @@ llm:
 ### 例子 1：载入数据
 
 ```bash
-# 用内置 seed（48 个模型 × 14 个 benchmark，公开 leaderboard 近似值）
+# 用内置 seed（48 个模型 × 22 个 benchmark，公开 leaderboard 近似值）
 benchmark-diagnosis ingest --seed
-# 输出: Ingested: {'models': 48, 'benchmarks': 14, 'scores': 469}
+# 输出: Ingested: {'models': 48, 'benchmarks': 22, 'scores': 599}
 
 # 或载入你自己的数据（结构见 data/seed/seed_reference.json）
 benchmark-diagnosis ingest --file my_data.json
@@ -248,11 +256,11 @@ src/benchmark_diagnosis/
 ## 测试
 
 ```bash
-pytest -q              # 73 个测试
+pytest -q              # 80 个测试
 ruff check src tests   # 风格检查
 ```
 
 ## 说明
 
-- `data/seed/seed_reference.json` 是**近似值**（公开 leaderboard 近似数，覆盖到 2026 年初的前沿模型：GPT-4o/o1/o3、Claude 3.5/3.7、Gemini 2.0/2.5、DeepSeek-V3/R1/V3.1/V3.2/V4、Qwen2.5/Qwen3/Qwen3-Coder、GLM-4.5/4.6、Kimi-K2、Llama-3.1/3.3 等，含 SWE-bench / τ²-bench 等 agentic benchmark），仅用于 bootstrap 预期曲线，生产前请用真实数据替换。
+- `data/seed/seed_reference.json` 是**近似值**（公开 leaderboard 近似数，覆盖到 2026 年初的前沿模型：GPT-4o/o1/o3、Claude 3.5/3.7、Gemini 2.0/2.5、DeepSeek-V3/R1/V3.1/V3.2/V4、Qwen2.5/Qwen3/Qwen3-Coder、GLM-4.5/4.6、Kimi-K2、Llama-3.1/3.3 等；22 个 benchmark 含 SWE-bench / τ²-bench 等 agentic benchmark，并补充了 2026 主流数据集：AIME 2025、FrontierMath、MATH-500、BigCodeBench、Terminal-Bench、SimpleQA、MMMU、LongBench V2，难度档位已做隔离（BigCodeBench 仅 Instruct-FULL、Terminal-Bench 仅 v1.0）），仅用于 bootstrap 预期曲线，生产前请用真实数据替换。
 - 参数量不可得的闭源模型，预期曲线自动走"时间→前沿包络"维度判定，不会被漏掉。
