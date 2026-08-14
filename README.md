@@ -23,23 +23,9 @@
 
 ![能力聚类](results/figures/fig_cluster_map.png)
 
-> 空间距离 = 各 benchmark 分数在 48 个模型上的**协同变化程度**（pairwise-complete 秩相关 → 特征分解 → KMeans）。落点来自**单位化因子载荷**的二维投影：距离近似反映两两相关，而不是单个 benchmark 在主导因子上的载荷强度（修正了早前版本"高相关任务被载荷强度拉远"的问题）。同簇 = 训练时往往一起提升（可迁移 / 共训）。当前 5 簇：
->
-> - **前沿数学 / 强推理**：AIME 2024/2025、FrontierMath、GPQA、LongBench V2、MATH-500、MMLU-Pro；
-> - **通用知识 / 中等数学**：ARC-Challenge、GSM8K、Hellaswag、IFEval、MATH、MMLU、SimpleQA —— `math` 与 `gsm8k` 同簇（Spearman ρ ≈ 0.74）；
-> - **代码 / agentic**：BigCodeBench、HumanEval(+)、LiveCodeBench、SWE-bench、τ²-bench —— `livecodebench` 与 `swe_bench` 同簇（ρ ≈ 0.85）；
-> - **终端 agentic**：Terminal-Bench（独立簇）；
-> - **多模态**：MMMU（独立簇）。
->
-> 已补充 2026 主流数据集：AIME 2025、FrontierMath、MATH-500、BigCodeBench（仅 Instruct-FULL 难度档）、Terminal-Bench（仅 v1.0）、SimpleQA、MMMU、LongBench V2。分数 provenance 在 seed 的 `_note` 中标注为 `verified`（已核对）或 `estimated`（按同模型已知排位标定）。
+### 预期曲线示例：SWE-bench（参数量拟合 + 时间前沿）
 
-### 预期曲线示例：MMLU-Pro（参数量拟合 + 时间前沿）
-
-![MMLU-Pro 预期曲线](results/figures/fig_curves_mmlu_pro.png)
-
-> MMLU-Pro 是 MMLU（2021）的 2024 继任基准，难度更高、数据覆盖充足，故作为预期曲线示例。
->
-> 这些图由 `benchmark-diagnosis visualize` 生成；重跑会覆盖 `results/`，版本号随之更新。
+![SWE-bench 预期曲线](results/figures/fig_curves_swe_bench.png)
 
 ---
 
