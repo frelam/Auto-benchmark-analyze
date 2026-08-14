@@ -163,6 +163,7 @@ def visualize(
     fig_paths += viz.render_frontier_overview(curves, fig_dir)
     fig_paths += viz.render_coverage_profile(coverage, fig_dir)
     fig_paths += viz.render_coverage_metrics(coverage, fig_dir)
+    fig_paths += viz.render_cluster_map(coverage, fig_dir, benchmark_names)
     fig_paths += viz.render_correlation(scores, fig_dir)
 
     out.mkdir(parents=True, exist_ok=True)

@@ -17,7 +17,7 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
 _MIN_NON_NULL = 2  # benchmarks must have at least this many scores to enter PCA
-_VARIANCE_THRESHOLD = 0.7
+_VARIANCE_THRESHOLD = 0.8
 _MAX_AUTO_FACTORS = 8
 _DEFAULT_FACTORS = 2
 
@@ -40,7 +40,7 @@ def fit_factor_model(scores: pd.DataFrame, n_factors: int | None = None) -> Fact
     remaining NaNs are imputed with the column mean, each benchmark column is
     z-scored, then PCA is run. ``n_factors`` is auto-chosen (smallest k in
     [2 .. min(8, n_benchmarks)] whose cumulative explained variance ratio
-    reaches 0.7, defaulting to 2) unless given explicitly.
+    reaches 0.8, defaulting to 2) unless given explicitly.
 
     Args:
         scores: DataFrame indexed by model_id with one column per benchmark.

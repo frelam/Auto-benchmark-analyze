@@ -7,6 +7,7 @@ used) so results are reproducible (design doc sections 2.5 / 4.2.5).
 from __future__ import annotations
 
 import json
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -112,6 +113,24 @@ def _fmt(value: Any, digits: int = 3) -> str:
     return str(value)
 
 
+def cluster_capability_labels(coverage: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """Map each capability cluster to its dominant declared tags (top-3 by frequency).
+
+    The result labels each statistically-discovered cluster with the capabilities
+    its member benchmarks officially measure, which is how a cluster is read as
+    "which capabilities tend to move together".
+    """
+    tag_counts: dict[str, Counter] = {}
+    for row in coverage:
+        counter = tag_counts.setdefault(row["primary_cluster"], Counter())
+        for tag in row.get("design_goal_tags") or []:
+            counter[tag] += 1
+    return {
+        cluster: [tag for tag, _ in counter.most_common(3)]
+        for cluster, counter in sorted(tag_counts.items())
+    }
+
+
 def render_results_summary(
     *,
     coverage: list[dict[str, Any]],
@@ -172,6 +191,18 @@ def render_results_summary(
                 f"{'⚠️' if row.get('saturated_flag') else ''} | "
                 f"{row['design_goal_agreement_score']:.2f} | {tags} |"
             )
+        lines.append("")
+
+    cluster_labels = cluster_capability_labels(coverage)
+    if cluster_labels:
+        lines.append("## Capability clusters")
+        lines.append("")
+        lines.append("_Clusters group benchmarks whose scores co-vary across models — "
+                     "i.e. correlated capabilities that tend to improve together "
+                     "during training._")
+        lines.append("")
+        for cluster, tags in cluster_labels.items():
+            lines.append(f"- **{cluster}**: {', '.join(tags)}")
         lines.append("")
 
     if portfolios:

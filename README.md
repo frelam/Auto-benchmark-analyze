@@ -42,6 +42,12 @@
 - 完整归档：**[`results/README.md`](results/README.md)**（覆盖表 + 代表性组合 + 全部图表 + 资产版本号）
 - 原始资产：`results/coverage.json` / `results/portfolio.json` / `results/curves.json`
 
+### 能力聚类图（哪些能力在训练时相关）
+
+![能力聚类](results/figures/fig_cluster_map.png)
+
+> 图中空间距离 = 各 benchmark 分数在 48 个模型上的协同变化程度。落在同一簇的 benchmark 测的是**相关能力**——训练时往往一起提升（可迁移 / 共训）。例如 `agentic_tool_use` 与 `code`、`instruction_following` 聚成一簇，`math`/`reasoning`/`world_knowledge` 聚成另一簇。
+
 ### 各 benchmark 的 SOTA 前沿（时间维度）
 
 ![SOTA 前沿](results/figures/fig_frontier_overview.png)
@@ -80,7 +86,7 @@ pip install -e ".[dev]"          # 开发依赖（pytest / ruff）
 ## 快速开始（30 秒）
 
 ```bash
-# 1. 载入 seed 参考数据（38 个模型 × 12 个 benchmark，公开 leaderboard 近似值）
+# 1. 载入 seed 参考数据（48 个模型 × 14 个 benchmark，公开 leaderboard 近似值）
 benchmark-diagnosis ingest --seed
 
 # 2. 离线构建：能力覆盖表 + 代表性组合 + 预期曲线
@@ -121,9 +127,9 @@ llm:
 ### 例子 1：载入数据
 
 ```bash
-# 用内置 seed（38 个模型 × 12 个 benchmark，公开 leaderboard 近似值）
+# 用内置 seed（48 个模型 × 14 个 benchmark，公开 leaderboard 近似值）
 benchmark-diagnosis ingest --seed
-# 输出: Ingested: {'models': 38, 'benchmarks': 12, 'scores': 307}
+# 输出: Ingested: {'models': 48, 'benchmarks': 14, 'scores': 469}
 
 # 或载入你自己的数据（结构见 data/seed/seed_reference.json）
 benchmark-diagnosis ingest --file my_data.json
@@ -248,5 +254,5 @@ ruff check src tests   # 风格检查
 
 ## 说明
 
-- `data/seed/seed_reference.json` 是**近似值**（公开 leaderboard 近似数，覆盖到 2025 年初的前沿模型：GPT-4o/o1/o3、Claude 3.5/3.7、Gemini 2.0/2.5、DeepSeek-V3/R1、Qwen2.5、Llama-3.1/3.3 等），仅用于 bootstrap 预期曲线，生产前请用真实数据替换。
+- `data/seed/seed_reference.json` 是**近似值**（公开 leaderboard 近似数，覆盖到 2026 年初的前沿模型：GPT-4o/o1/o3、Claude 3.5/3.7、Gemini 2.0/2.5、DeepSeek-V3/R1/V3.1/V3.2/V4、Qwen2.5/Qwen3/Qwen3-Coder、GLM-4.5/4.6、Kimi-K2、Llama-3.1/3.3 等，含 SWE-bench / τ²-bench 等 agentic benchmark），仅用于 bootstrap 预期曲线，生产前请用真实数据替换。
 - 参数量不可得的闭源模型，预期曲线自动走"时间→前沿包络"维度判定，不会被漏掉。

@@ -63,6 +63,13 @@ def test_render_results_summary_contains_sections() -> None:
     assert "![fig_curves_mmlu.png](figures/fig_curves_mmlu.png)" in summary
 
 
+def test_cluster_capability_labels() -> None:
+    from benchmark_diagnosis.reporting.report_generator import cluster_capability_labels
+
+    labels = cluster_capability_labels(_coverage())
+    assert set(labels["cluster_0"]) == {"world_knowledge", "reasoning", "math"}
+
+
 def test_render_figures_write_png(tmp_path) -> None:
     pytest.importorskip("matplotlib")
     from benchmark_diagnosis.reporting import visualize
@@ -91,6 +98,9 @@ def test_render_figures_write_png(tmp_path) -> None:
     assert written and written[0].exists()
 
     written = visualize.render_coverage_metrics(_coverage(), tmp_path)
+    assert written and written[0].exists()
+
+    written = visualize.render_cluster_map(_coverage(), tmp_path)
     assert written and written[0].exists()
 
     scores = pd.DataFrame({"mmlu": [0.66, 0.70, 0.68], "gsm8k": [0.79, 0.80, 0.82]})

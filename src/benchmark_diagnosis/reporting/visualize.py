@@ -231,6 +231,76 @@ def render_coverage_metrics(coverage: list[dict], out_dir: Path) -> list[Path]:
     return [path]
 
 
+def render_cluster_map(
+    coverage: list[dict],
+    out_dir: Path,
+    benchmark_names: dict[str, str] | None = None,
+) -> list[Path]:
+    """Scatter benchmarks in factor space, colored by cluster + labeled by capability.
+
+    The 2D embedding is a PCA of each benchmark's discrimination profile, so
+    proximity means "these benchmarks' scores co-vary across models". A cluster
+    is therefore a group of *correlated capabilities* — the kind that tend to
+    transfer together during training — and is labeled with its dominant tags.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if len(coverage) < 2:
+        return []
+
+    from sklearn.decomposition import PCA
+
+    from benchmark_diagnosis.reporting.report_generator import (
+        cluster_capability_labels,
+    )
+
+    names = benchmark_names or {}
+    rows = sorted(coverage, key=lambda r: (r["primary_cluster"], r["benchmark_id"]))
+    dims = sorted({d for row in rows for d in row["discrimination_profile"]})
+    matrix = np.array(
+        [[row["discrimination_profile"].get(d, 0.0) for d in dims] for row in rows]
+    )
+    if matrix.shape[1] >= 2:
+        coords = PCA(n_components=2, random_state=0).fit_transform(matrix)
+    else:
+        coords = np.column_stack([matrix[:, 0], np.zeros(matrix.shape[0])])
+
+    cluster_labels = cluster_capability_labels(coverage)
+    clusters = sorted({row["primary_cluster"] for row in rows})
+    cmap = plt.get_cmap("tab10")
+
+    fig, ax = plt.subplots(figsize=(10.5, 7))
+    for ci, cluster in enumerate(clusters):
+        idxs = [i for i, row in enumerate(rows) if row["primary_cluster"] == cluster]
+        color = cmap(ci % 10)
+        ax.scatter(
+            coords[idxs, 0], coords[idxs, 1], s=150, color=color, alpha=0.85,
+            edgecolors="white", linewidths=1.0, zorder=3,
+            label=f"{cluster}: {', '.join(cluster_labels.get(cluster, []))}",
+        )
+        for i in idxs:
+            ax.annotate(
+                names.get(rows[i]["benchmark_id"], rows[i]["benchmark_id"]),
+                (coords[i, 0], coords[i, 1]),
+                fontsize=8, xytext=(7, 5), textcoords="offset points", zorder=4,
+            )
+
+    ax.set_xlabel("Factor component 1")
+    ax.set_ylabel("Factor component 2")
+    ax.set_title(
+        "Proximity = score co-variation across models  =>  correlated "
+        "(co-trainable) capabilities",
+        fontsize=9, pad=12,
+    )
+    ax.grid(True, alpha=0.25)
+    ax.legend(title="cluster -> dominant capabilities", frameon=False, fontsize=8)
+    fig.suptitle("Benchmark capability clusters", fontweight="bold", fontsize=13)
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
+    path = out_dir / "fig_cluster_map.png"
+    fig.savefig(path, dpi=_DPI, bbox_inches="tight")
+    plt.close(fig)
+    return [path]
+
+
 def render_correlation(scores, out_dir: Path) -> list[Path]:
     """Pearson correlation heatmap over benchmarks (min 2 shared models)."""
     out_dir.mkdir(parents=True, exist_ok=True)
