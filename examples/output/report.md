@@ -2,9 +2,9 @@
 
 - **model_id**: `llama-3-8b`
 - **arch**: dense | total_params: 8.000 | active_params: 8.000
-- **generated_at**: 2026-08-14T09:51:10.645129
+- **generated_at**: 2026-08-14T10:03:27.804677
 - **mode**: full | **advisor**: rules
-- **asset versions**: coverage=`coverage-20260814095110-f4153a` portfolio=`portfolio-20260814095110-cf874e` curves=`curves-20260814095110-bc3ca1`
+- **asset versions**: coverage=`coverage-20260814084434-3e725b` portfolio=`portfolio-20260814084434-ecae13` curves=`curves-20260814084434-ee521f`
 
 ## Summary — 3 capability cluster(s)
 

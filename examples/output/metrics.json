@@ -7,13 +7,13 @@
     "active_params": 8.0,
     "release_date": "2024-04-18"
   },
-  "generated_at": "2026-08-14T09:51:10.645129",
+  "generated_at": "2026-08-14T10:03:27.804677",
   "mode": "full",
   "advisor_mode": "rules",
   "versions": {
-    "coverage_version": "coverage-20260814095110-f4153a",
-    "portfolio_version": "portfolio-20260814095110-cf874e",
-    "curves_version": "curves-20260814095110-bc3ca1"
+    "coverage_version": "coverage-20260814084434-3e725b",
+    "portfolio_version": "portfolio-20260814084434-ecae13",
+    "curves_version": "curves-20260814084434-ee521f"
   },
   "clusters": [
     {

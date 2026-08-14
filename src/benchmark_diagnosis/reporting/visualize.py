@@ -377,28 +377,41 @@ def render_model_scores(
 ) -> list[Path]:
     """Horizontal bar chart of the evaluated model's per-benchmark scores.
 
-    Benchmarks in the representative portfolio are drawn in a distinct color so
-    the screened subset stands out from any extra scores the user supplied.
+    Benchmarks in the representative portfolio are drawn in the highlight color
+    so the screened subset stands out from any extra scores the user supplied.
+    Bars are labelled with their value and sorted best-first so the chart reads
+    top-down like a leaderboard.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     if not raw_scores:
         return []
     portfolio_ids = set(portfolio_ids or [])
 
-    items = sorted(raw_scores.items(), key=lambda kv: kv[1])
+    items = sorted(raw_scores.items(), key=lambda kv: kv[1], reverse=True)
     labels = [b for b, _ in items]
     values = [_score100(v) for _, v in items]
-    colors = [_C_MODEL if b in portfolio_ids else "#BBBBBB" for b, _ in items]
+    colors = [_C_MODEL if b in portfolio_ids else "#CFCFCF" for b, _ in items]
 
-    fig, ax = plt.subplots(figsize=(6.0, 0.5 * max(len(items), 3) + 1.4))
-    bars = ax.barh(labels, values, color=colors, alpha=0.9)
-    for bar, value in zip(bars, values, strict=True):
-        ax.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height() / 2,
-                f"{value:.1f}", va="center", fontsize=7)
-    ax.set_xlabel("Score (0-100)")
-    ax.set_title("Evaluated model — per-benchmark scores")
-    ax.set_xlim(0, max(values) * 1.12 + 4)
-    ax.grid(True, axis="x", alpha=0.25)
+    n = len(items)
+    fig, ax = plt.subplots(figsize=(6.0, 0.34 * n + 0.55))
+    y = np.arange(n)
+    ax.barh(y, values, height=0.6, color=colors, alpha=0.95)
+    for yi, value in zip(y, values, strict=True):
+        ax.text(value + 0.6, yi, f"{value:.1f}",
+                va="center", ha="left", fontsize=8, color="#333333")
+    ax.set_yticks(y)
+    ax.set_yticklabels(labels, fontsize=8)
+    ax.set_xlim(0, max(values) * 1.13 + 3)
+    ax.set_xlabel("Score (0–100)", fontsize=9)
+    ax.set_title("Per-benchmark scores (blue = representative portfolio)",
+                 fontsize=10, pad=8)
+    ax.tick_params(length=0)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.spines["bottom"].set_color("#BBBBBB")
+    ax.grid(True, axis="x", alpha=0.2, lw=0.6)
+    ax.set_axisbelow(True)
     has_portfolio = any(b in portfolio_ids for b, _ in items)
     has_extra = any(b not in portfolio_ids for b, _ in items)
     if has_portfolio and has_extra:
@@ -407,9 +420,9 @@ def render_model_scores(
         ax.legend(
             handles=[
                 Patch(color=_C_MODEL, label="representative portfolio"),
-                Patch(color="#BBBBBB", label="extra score"),
+                Patch(color="#CFCFCF", label="extra score"),
             ],
-            frameon=False, fontsize=8, loc="lower right",
+            frameon=False, fontsize=7, loc="lower right",
         )
     fig.tight_layout()
     path = out_dir / "fig_model_scores.png"
