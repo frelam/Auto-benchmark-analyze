@@ -1,0 +1,28 @@
+[
+  {
+    "cluster_id": "cluster_0",
+    "benchmarks": [
+      {
+        "benchmark_id": "aime24",
+        "weight": 0.9773705085001599
+      },
+      {
+        "benchmark_id": "math",
+        "weight": 0.01710427656306897
+      },
+      {
+        "benchmark_id": "ifeval",
+        "weight": 0.005525214936771021
+      }
+    ]
+  },
+  {
+    "cluster_id": "cluster_1",
+    "benchmarks": [
+      {
+        "benchmark_id": "mmlu",
+        "weight": 1.0
+      }
+    ]
+  }
+]
