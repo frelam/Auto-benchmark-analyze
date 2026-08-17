@@ -58,7 +58,10 @@ class RunRequest:
 
     ``source`` selects the model source: ``weights`` (auto-deploy via vLLM),
     ``endpoint`` (existing inference service IP) or ``scores`` (JSON file, no
-    eval). ``mode`` picks analyze-only vs analysis + recommendations.
+    eval). ``mode`` picks how far the pipeline goes: ``benchmark`` (evaluation
+    only, scores written to disk — no diagnosis), ``analyze`` (evaluation +
+    diagnosis, no recommendations), or ``full`` (evaluation + diagnosis +
+    recommendations).
     """
 
     model: str | None = None
@@ -67,6 +70,7 @@ class RunRequest:
     weights: str | None = None
     base_url: str | None = None
     scores_file: Path | None = None
+    benchmarks: list[str] | None = None
     arch: str | None = None
     params: float | None = None
     release_date: str | None = None
@@ -99,6 +103,7 @@ def build_run_request(
     arch: str | None = None,
     params: float | None = None,
     release_date: str | None = None,
+    benchmarks: list[str] | None = None,
     output: str | Path | None = None,
 ) -> RunRequest:
     """Merge CLI arguments over the config's ``run`` profile into a run request.
@@ -115,10 +120,16 @@ def build_run_request(
         model_id: HuggingFace weights id / local path (source ``weights``).
         base_url: Existing OpenAI-compatible endpoint (source ``endpoint``).
         scores: JSON ``{benchmark_id: score}`` file (source ``scores``; no eval).
-        mode: ``"analyze"`` or ``"full"`` (default ``run.mode``).
+        mode: ``"benchmark"`` (eval only), ``"analyze"`` (eval + diagnosis, no
+            recommendations), or ``"full"`` (default ``run.mode``).
         advisor_mode: ``auto`` / ``llm_rules`` / ``rules`` (default
             ``recommendation.advisor_mode``).
         arch / params / release_date: New-model metadata.
+        benchmarks: Optional subset of the representative portfolio to evaluate
+            (e.g. ``["mmlu_pro", "math"]``). CLI ``--benchmarks`` (comma-
+            separated) overrides ``run.model.benchmarks``. Only effective on
+            the evaluation path (``weights`` / ``endpoint``); ignored when
+            ``source=scores`` (the scores file carries its own benchmark set).
         output: Report output path (defaults to ``run.output.dir/report.md``).
 
     Returns:
@@ -185,8 +196,10 @@ def build_run_request(
         )
 
     resolved_mode = mode or settings.run.mode
-    if resolved_mode not in ("analyze", "full"):
-        raise ValueError(f"unknown mode {resolved_mode!r}; expected analyze|full")
+    if resolved_mode not in ("benchmark", "analyze", "full"):
+        raise ValueError(
+            f"unknown mode {resolved_mode!r}; expected benchmark|analyze|full"
+        )
     if advisor_mode not in (None, "auto", "llm_rules", "rules"):
         raise ValueError(
             f"unknown advisor_mode {advisor_mode!r}; expected auto|llm_rules|rules"
@@ -198,6 +211,19 @@ def build_run_request(
     if resolved_model is None:
         raise ValueError("a model name is required: pass --model (or set run.model.name)")
 
+    # Benchmark subset: CLI wins over config; an empty list reads as "no
+    # constraint" so a YAML `benchmarks: []` is the same as unset. Ignored for
+    # the scores path — the scores file already carries its own benchmark set.
+    resolved_benchmarks = benchmarks if benchmarks is not None else cfg.benchmarks
+    if resolved_benchmarks is not None and not resolved_benchmarks:
+        resolved_benchmarks = None
+    if resolved_benchmarks is not None and source == "scores":
+        console.print(
+            "[yellow]--benchmarks is ignored on the scores path "
+            "(the scores file carries its own benchmark set).[/]"
+        )
+        resolved_benchmarks = None
+
     return RunRequest(
         model=resolved_model,
         mode=resolved_mode,
@@ -205,6 +231,7 @@ def build_run_request(
         weights=resolved_weights,
         base_url=resolved_base_url,
         scores_file=resolved_scores,
+        benchmarks=resolved_benchmarks,
         arch=arch or cfg.arch,
         params=params if params is not None else cfg.params,
         release_date=release_date or cfg.release_date,
@@ -242,9 +269,14 @@ def execute_run(
         RuntimeError: if a weights deployment never becomes ready.
     """
     mode = request.mode
-    if mode not in ("analyze", "full"):
-        raise ValueError(f"unknown mode {mode!r}; expected analyze|full")
-    advisor_mode = resolve_advisor_mode(settings, request.advisor_mode)
+    if mode not in ("benchmark", "analyze", "full"):
+        raise ValueError(f"unknown mode {mode!r}; expected benchmark|analyze|full")
+    # benchmark mode stops after evaluation; no advisor / diagnosis is needed.
+    advisor_mode = (
+        resolve_advisor_mode(settings, request.advisor_mode)
+        if mode != "benchmark"
+        else "n/a"
+    )
 
     deploy_weights = deploy_weights or _launch_server
     wait_ready = wait_ready or wait_until_ready
@@ -281,6 +313,33 @@ def execute_run(
                 "[yellow]Warning: none of the scores overlap the representative "
                 "portfolio; cluster analysis will be empty. Overlap needs one of: "
                 f"{sorted(portfolio_ids)}[/]"
+            )
+
+        if mode == "benchmark":
+            # Benchmark-only: write the scores JSON and stop — no diagnosis.
+            # The file is shaped exactly like the ``--scores`` input so a
+            # follow-up ``run --scores <path>`` completes the diagnosis.
+            scores_path = (
+                request.output or Path(settings.run.output.dir) / "report.md"
+            )
+            scores_path = scores_path.parent / "scores.json"
+            scores_path.parent.mkdir(parents=True, exist_ok=True)
+            scores_path.write_text(
+                json.dumps(raw_scores, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            console.print(
+                f"[green]Scores:[/] {scores_path} ({len(raw_scores)} benchmarks) "
+                f"— feed back with `run --scores {scores_path}`"
+            )
+            return RunResult(
+                report={"scores": raw_scores, "mode": "benchmark"},
+                report_path=scores_path,
+                metrics_path=scores_path,
+                figure_paths=[],
+                mode="benchmark",
+                advisor_mode=advisor_mode,
+                served=source == "weights",
             )
 
         model_record = get_or_build_model(
@@ -396,9 +455,9 @@ def _collect_scores(
         console.print(f"[green]Loaded {len(raw)} score(s) from {scores_path}[/]")
         return raw
 
-    tasks = sorted(portfolio_ids)
+    tasks = _resolve_eval_tasks(portfolio_ids, request.benchmarks)
     if not tasks:
-        console.print("[yellow]No portfolio benchmarks to evaluate; skipping eval.[/]")
+        console.print("[yellow]No benchmarks to evaluate; skipping eval.[/]")
         return {}
     cmd = build_command(
         request.model,
@@ -410,10 +469,36 @@ def _collect_scores(
         output_dir=Path(settings.evaluation.output_dir),
         harness_cmd=settings.evaluation.harness_cmd,
     )
-    console.print("[cyan]Evaluating...[/] " + " ".join(cmd))
+    if request.benchmarks:
+        console.print(f"[cyan]Evaluating {len(tasks)} benchmark(s)[/] (subset: {','.join(tasks)})")
+    else:
+        console.print(f"[cyan]Evaluating {len(tasks)} benchmark(s)[/] (full portfolio)")
+    console.print("[dim]  " + " ".join(cmd) + "[/]")
     raw_scores = extract_scores(run_harness(cmd))
     _print_scores(raw_scores)
     return raw_scores
+
+
+def _resolve_eval_tasks(
+    portfolio_ids: set[str], benchmarks: list[str] | None
+) -> list[str]:
+    """Pick the evaluation task list, honoring an optional benchmark subset.
+
+    With ``benchmarks=None`` the full representative portfolio is evaluated.
+    With a subset, the intersection is evaluated and any requested ids not in
+    the portfolio are reported (they are still evaluated — the harness knows the
+    task — but they will not feed the cluster analysis downstream).
+    """
+    if not benchmarks:
+        return sorted(portfolio_ids)
+    off = [b for b in benchmarks if b not in portfolio_ids]
+    if off:
+        console.print(
+            f"[yellow]Warning: {len(off)} of {len(benchmarks)} requested "
+            f"benchmark(s) are not in the representative portfolio and will be "
+            f"evaluated but excluded from cluster analysis: {off}[/]"
+        )
+    return sorted(benchmarks)
 
 
 def _render_figures(

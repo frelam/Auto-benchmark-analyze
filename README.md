@@ -43,47 +43,91 @@ bash scripts/install.sh --download-data    # 可选：额外预下载评测数�
 
 ## 快速开始（30 秒）
 
-有模型权重（需 GPU）：
+一条 `run` 命令完成"评测 + 诊断 + 建议"。先选**模型来源**（三选一），再用 `--mode` 控制**跑到哪一步**（默认 `full`）：
+
+| 模型来源 | 参数 | 是否需要 GPU |
+|---|---|---|
+| 模型权重 | `--model-id meta-llama/Llama-3-8B-Instruct` | 是（自动 vLLM 部署 → 评测） |
+| 推理服务 IP | `--base-url http://<ip>:8000/v1` | 否（直接评测已有服务） |
+| 已有 benchmark 分数 | `--scores scores.json` | 否（跳过评测；`{benchmark_id: 分数}` JSON） |
+
+| `--mode` | 跑到哪一步 | 产出 |
+|---|---|---|
+| `benchmark` | 只评测，不诊断 | `scores.json`（可直接喂回 `--scores` 接着跑诊断） |
+| `analyze` | 评测 + 诊断 | + `report.md`（无建议文案） |
+| `full`（默认） | 评测 + 诊断 + 建议 | + `report.md` 完整版（含可执行建议） |
+
+> 三种来源互斥：传两个会被拒绝并报清晰错误。来源 / mode / advisor 也能写进 YAML 用 `--config` 传，CLI 参数覆盖配置。数据库为空时自动载入 seed 并构建离线资产，无需手动准备。
+
+### ① 有权重或已部署服务 → 跑完整流程
 
 ```bash
+# 有权重：自动部署 → 评测 → 诊断 → 建议
 benchmark-diagnosis run --model llama-3-8b --model-id meta-llama/Llama-3-8B-Instruct
-```
 
-只有推理服务 IP：
-
-```bash
+# 已有推理服务 IP：跳过部署，直接评测 → 诊断 → 建议
 benchmark-diagnosis run --model my-model --base-url http://<ip>:8000/v1
 ```
 
-一条 `run` 自动完成：部署（如有权重）→ 评测 → 诊断 → 建议 → 写报告（`report.md` + `metrics.json` + `figures/`）。数据库为空时自动载入 seed 并构建离线资产，无需手动准备。
+### ② 只想跑 benchmark（拿分数，先不诊断）
 
-不想上 GPU、想先离线看效果，或想手动重建离线资产：
-
-```bash
-benchmark-diagnosis --config examples/run-from-scores.yaml run   # 用分数文件跑全流程（无需 GPU）
-benchmark-diagnosis visualize --out results                      # 把离线资产渲染成图表归档到 results/
-```
-
-### 统一诊断管线（Stages 1-7）
-
-`run` 一条命令就是完整的 v2 诊断管线（无需开关）：
-候选能力生成（item 级 sub-accuracy / benchmark 级标签）→ probe 单项复测（含 pass@1/pass@k）
-→ 引导式 bad case 分析（content/format/grading 归因）→ 置信度融合（High/Medium/Low）
-→ 优先级排序（ExpectedGain / Cost）→ 具体建议文案，报告内含"诊断"章节：
+加 `--mode benchmark`：只评测，把分数写到 `scores.json`，之后用 `--scores` 接着跑诊断。
 
 ```bash
-benchmark-diagnosis --config examples/run-from-scores.yaml run
+benchmark-diagnosis run --model my-model --base-url http://<ip>:8000/v1 --mode benchmark
+# → data/run_output/scores.json
 ```
 
-只想看归因分析、不要 Stage 6 的建议文案时，加 `--mode analyze` 跳过建议写作。
+省时间只跑几个 benchmark：用 `--benchmarks` 逗号分隔指定子集（代表性 portfolio 的子集）。
 
-执行建议后，用反馈回路校准 Stage 5 的 Cost/Gain 估计（跑得越久排得越准）：
+```bash
+benchmark-diagnosis run --model my-model --base-url http://<ip>:8000/v1 \
+  --mode benchmark --benchmarks mmlu_pro,math,swe_bench
+```
+
+> `--benchmarks` 只在评测路径（`--model-id` / `--base-url`）生效；`--scores` 路径会忽略它（分数文件自带 benchmark 列表，会提前提示）。每样本数 cap 用 `evaluation.limit` 配置（debug 用）。
+
+### ③ 已有 benchmark 分数 → 只跑诊断
+
+用 `--scores` 跳过评测，直接诊断（默认 `full` 含建议；只要归因不要建议就加 `--mode analyze`）：
+
+```bash
+benchmark-diagnosis run --model my-model --scores scores.json
+benchmark-diagnosis run --model my-model --scores scores.json --mode analyze   # 只要归因，不要建议
+```
+
+> 没 GPU 想先看效果？用一份 JSON 分数文件代替真实评测，30 秒出结果（下面的输出就来自这条命令）：
+> ```bash
+> benchmark-diagnosis --config examples/run-from-scores.yaml run
+> ```
+
+### ④ 跑完看什么、怎么拿结论
+
+跑完写到 `<output dir>/`（默认 `data/run_output/`，用 `--output` 或 `run.output.dir` 改）：
+
+| 文件 | 内容 |
+|---|---|
+| `report.md` | 完整诊断报告（人看） |
+| `metrics.json` | 同内容，机器可读 |
+| `figures/` | 三张图：各 benchmark 分数 / 各能力簇判定（绿=达标 · 红=不及预期）/ 量化 gap |
+
+**最关心的结论在 `report.md` 的"诊断"章节**：每条都讲清楚"低分 benchmark → 缺什么能力 → 该补什么数据集 / 调什么参数 + 预期收益 + 验证实验"。命令行也打印摘要（N 个簇、M 个 under-performing）。
+
+### 诊断管线与反馈回路
+
+`run`（`analyze` / `full`）走统一诊断管线 Stage 0-7：簇级判定聚合 → 候选能力生成 → probe 单项复测（pass@1/pass@k）→ 引导式 bad case 归因（content/format/grading）→ 置信度融合（High/Medium/Low）→ 优先级排序（ExpectedGain/Cost）→ 建议文案 → 反馈校准。`--mode analyze` 跳过 Stage 6 建议文案。执行建议后用反馈回路校准 Stage 5 的 Cost/Gain 估计（跑得越久排得越准）：
 
 ```bash
 benchmark-diagnosis feedback log reasoning.math.calculation rejection_sampling \
   --predicted-gain 0.4 --actual-gain 0.35 --predicted-cost 1.0 --actual-cost 1.5
 benchmark-diagnosis feedback recalibrate        # 重估 cost 比例 + gain 缩放
 benchmark-diagnosis feedback list               # 查看执行记录
+```
+
+想手动重建离线资产 / 出图表归档：
+
+```bash
+benchmark-diagnosis visualize --out results      # 把离线资产渲染成图表归档到 results/
 ```
 
 ---

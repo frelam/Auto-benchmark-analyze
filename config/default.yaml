@@ -73,13 +73,14 @@ recommendation:
 # Unified run profile consumed by `benchmark-diagnosis run`. The same keys can
 # be passed as CLI args; CLI args take precedence over this section.
 run:
-  mode: full                  # analyze | full
+  mode: full                  # benchmark (eval only, writes scores.json) | analyze (eval + diagnosis) | full (eval + diagnosis + recommendations)
   model:
     name: null                # logical model id/name (required for run)
     source: null              # weights | endpoint | scores (null => auto-detect)
     weights: null             # HF id or local path (source=weights -> auto-deploy)
     base_url: null            # OpenAI-compatible /v1 endpoint (source=endpoint)
     scores_file: null         # JSON {benchmark_id: score} (source=scores, skip eval)
+    benchmarks: null          # null => full representative portfolio; or a subset like [mmlu_pro, math]
     arch: null                # dense | moe
     params: null              # parameter count in billions
     release_date: null        # ISO date

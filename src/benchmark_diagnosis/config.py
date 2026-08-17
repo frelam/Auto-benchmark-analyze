@@ -87,6 +87,11 @@ class RunModelConfig(BaseModel):
     inference service IP), or ``scores`` (skip evaluation, read a JSON scores
     file). When ``None`` it is auto-derived from whichever of ``weights`` /
     ``base_url`` / ``scores_file`` is set.
+
+    ``benchmarks`` optionally narrows the evaluation to a subset of the
+    representative portfolio (e.g. ``["mmlu_pro", "math"]``); only effective on
+    the evaluation path (``weights`` / ``endpoint``). It is ignored when
+    ``source=scores`` (the scores file already carries its own benchmark set).
     """
 
     name: str | None = None
@@ -94,6 +99,7 @@ class RunModelConfig(BaseModel):
     weights: str | None = None
     base_url: str | None = None
     scores_file: str | None = None
+    benchmarks: list[str] | None = None
     arch: str | None = None
     params: float | None = None
     release_date: str | None = None
@@ -104,7 +110,7 @@ class RunOutputConfig(BaseModel):
 
 
 class RunConfig(BaseModel):
-    mode: Literal["analyze", "full"] = "full"
+    mode: Literal["benchmark", "analyze", "full"] = "full"
     model: RunModelConfig = Field(default_factory=RunModelConfig)
     output: RunOutputConfig = Field(default_factory=RunOutputConfig)
 

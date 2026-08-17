@@ -90,6 +90,14 @@ def _run_or_exit(settings: Settings, **kwargs: Any) -> RunResult:
 
 
 def _print_result(result: RunResult) -> None:
+    if result.mode == "benchmark":
+        scores = result.report.get("scores", {}) or {}
+        console.print(f"[green]Scores written to {result.report_path}[/]")
+        console.print(
+            f"[cyan]{len(scores)} benchmark(s) scored[/] (mode=benchmark, "
+            f"served={result.served})"
+        )
+        return
     clusters = result.report.get("clusters", [])
     n_under = sum(1 for c in clusters if c.get("underperforming"))
     console.print(f"[green]Report written to {result.report_path}[/]")
@@ -280,7 +288,9 @@ def run(
         None, "--scores", help="JSON {benchmark_id: score} file; skip evaluation (source: scores).",
     ),
     mode: str = typer.Option(
-        None, "--mode", help="analyze (analysis only) or full (analysis + recommendations).",
+        None, "--mode",
+        help="benchmark (eval only, writes scores.json) | analyze (eval + diagnosis, "
+             "no recommendations) | full (eval + diagnosis + recommendations).",
     ),
     advisor_mode: str = typer.Option(
         None, "--advisor-mode", help="auto | llm_rules | rules (default auto).",
@@ -288,6 +298,12 @@ def run(
     arch: str = typer.Option(None, "--arch", help="dense|moe (new model)."),
     params: float = typer.Option(None, "--params", help="Parameter count in billions."),
     release_date: str = typer.Option(None, "--release-date", help="ISO date."),
+    benchmarks: str = typer.Option(
+        None, "--benchmarks",
+        help="Comma-separated benchmark ids to evaluate (subset of the representative "
+             "portfolio; e.g. mmlu_pro,math,swe_bench). Saves time by skipping the rest. "
+             "Only effective on the evaluation path; ignored with --scores.",
+    ),
     output: Path = typer.Option(
         None, "--output", help="Report output path (default: config run.output.dir/report.md).",
     ),
@@ -297,10 +313,20 @@ def run(
     Exactly one model source must be provided — ``--model-id`` (auto-deploys via
     vLLM), ``--base-url`` (reuse an inference service), or ``--scores`` (a JSON
     scores file, no evaluation). Source, mode, and advisor can also come from a
-    YAML config via ``--config``. Diagnosis always runs the unified stages 1-7
-    intelligent pipeline; use ``--mode analyze`` to skip Stage 6 suggestions.
+    YAML config via ``--config``. ``--mode`` picks how far the pipeline goes:
+    ``benchmark`` (eval only, writes ``scores.json`` — feed it back with
+    ``--scores``), ``analyze`` (eval + diagnosis, no recommendations), or
+    ``full`` (eval + diagnosis + recommendations, default). The diagnosis in
+    ``analyze``/``full`` always runs the unified stages 1-7 intelligent
+    pipeline; ``--mode analyze`` skips Stage 6 suggestions. ``--benchmarks``
+    narrows the evaluation to a subset of the representative portfolio.
     """
     settings: Settings = ctx.obj
+    benchmark_list = (
+        [b.strip() for b in benchmarks.split(",") if b.strip()]
+        if benchmarks is not None
+        else None
+    )
     result = _run_or_exit(
         settings,
         model=model,
@@ -312,6 +338,7 @@ def run(
         arch=arch,
         params=params,
         release_date=release_date,
+        benchmarks=benchmark_list,
         output=output,
     )
     _print_result(result)

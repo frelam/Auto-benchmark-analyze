@@ -122,6 +122,41 @@ def test_execute_run_analyze_mode_skips_recommendations(run_env):
     assert (suggestions.get("training") or []) == []
 
 
+def test_execute_run_benchmark_mode_writes_scores_and_skips_diagnosis(run_env):
+    settings, tmp_path, scores_path = run_env
+    request = RunRequest(
+        model="llama-3-8b", mode="benchmark", source="weights",
+        weights="meta-llama/Llama-3-8B",
+    )
+    proc = _StubProc()
+    result = execute_run(
+        settings, request,
+        deploy_weights=lambda cmd: proc,
+        wait_ready=lambda _: True,
+        run_harness=lambda cmd: _harness_results(),
+    )
+    assert result.mode == "benchmark"
+    assert result.figure_paths == []
+    assert proc.terminated and proc.waited  # weights still torn down
+    # scores.json is written and shaped as the --scores input format.
+    assert result.report_path == result.metrics_path
+    assert result.report_path.exists()
+    written = json.loads(result.report_path.read_text(encoding="utf-8"))
+    assert written == {"mmlu_pro": 0.5, "math": 0.4, "swe_bench": 0.18}
+    # no diagnosis artifacts: clusters absent, report carries only scores.
+    assert "clusters" not in result.report
+    assert result.report["scores"] == {"mmlu_pro": 0.5, "math": 0.4, "swe_bench": 0.18}
+
+
+def test_build_run_request_accepts_benchmark_mode(run_env):
+    settings, tmp_path, scores_path = run_env
+    request = build_run_request(
+        settings, model_id="meta-llama/Llama-3-8B", mode="benchmark"
+    )
+    assert request.mode == "benchmark"
+    assert request.source == "weights"
+
+
 def test_execute_run_weights_path_deploys_and_tears_down(run_env, monkeypatch):
     settings, tmp_path, scores_path = run_env
     request = RunRequest(
@@ -178,6 +213,72 @@ def test_execute_run_non_overlapping_scores_no_crash(run_env):
     result = execute_run(settings, request, deploy_weights=_NoServer)
     assert result.report["clusters"] == []
     assert result.report["scores"] == {"gsm8k": 79.0, "humaneval": 60.0}
+
+
+def test_build_run_request_benchmarks_cli_overrides_config(run_env):
+    settings, tmp_path, scores_path = run_env
+    settings.run.model.benchmarks = ["mmlu_pro", "gsm8k"]
+    request = build_run_request(
+        settings, model_id="meta-llama/Llama-3-8B", benchmarks=["math", "swe_bench"]
+    )
+    assert request.benchmarks == ["math", "swe_bench"]
+
+
+def test_build_run_request_benchmarks_from_config(run_env):
+    settings, tmp_path, scores_path = run_env
+    settings.run.model.benchmarks = ["mmlu_pro", "math"]
+    request = build_run_request(settings, model_id="meta-llama/Llama-3-8B")
+    assert request.benchmarks == ["mmlu_pro", "math"]
+
+
+def test_build_run_request_benchmarks_ignored_on_scores_path(run_env):
+    settings, tmp_path, scores_path = run_env
+    # CLI --benchmarks on the scores path must be ignored (scores file carries
+    # its own benchmark set); otherwise the user would get a confusing "subset"
+    # that has no effect on the eval (which is skipped).
+    request = build_run_request(
+        settings,
+        model="llama-3-8b",
+        scores=str(scores_path),
+        benchmarks=["mmlu_pro", "math"],
+    )
+    assert request.source == "scores"
+    assert request.benchmarks is None
+
+
+def test_build_run_request_benchmarks_empty_list_is_unset(run_env):
+    settings, tmp_path, scores_path = run_env
+    settings.run.model.benchmarks = []
+    request = build_run_request(settings, model_id="meta-llama/Llama-3-8B")
+    assert request.benchmarks is None
+
+
+def test_execute_run_benchmarks_subset_limits_eval_tasks(run_env):
+    settings, tmp_path, scores_path = run_env
+    request = RunRequest(
+        model="llama-3-8b",
+        source="weights",
+        weights="meta-llama/Llama-3-8B",
+        benchmarks=["mmlu_pro", "math", "swe_bench"],
+    )
+    captured: list[list[str]] = []
+
+    def fake_harness(cmd):
+        captured.append(cmd)
+        return _harness_results()
+
+    execute_run(
+        settings,
+        request,
+        deploy_weights=lambda cmd: _StubProc(),
+        wait_ready=lambda _: True,
+        run_harness=fake_harness,
+    )
+    # Only the requested subset is sent to the harness.
+    assert len(captured) == 1
+    tasks_idx = captured[0].index("--tasks") + 1
+    tasks = captured[0][tasks_idx].split(",")
+    assert set(tasks) == {"mmlu_pro", "math", "swe_bench"}
 
 
 def test_execute_run_fails_fast_on_forced_llm_without_model(run_env):

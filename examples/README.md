@@ -40,12 +40,13 @@ The model source is auto-derived: exactly one of `--model-id` (weights),
 `--base-url` (endpoint), or `--scores` (scores) must be provided — pass two and
 the tool refuses with a clear error.
 
-## The two modes
+## The three modes
 
 `run.mode` (or `--mode`) selects how far the analysis goes:
 
 | Mode | Produces |
 |---|---|
+| `benchmark` | evaluation only — writes `scores.json` (feed back with `--scores`); no diagnosis |
 | `analyze` | evaluation + analysis only (no recommendations) |
 | `full` | evaluation + analysis + optimization recommendations |
 
