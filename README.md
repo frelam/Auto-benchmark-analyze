@@ -51,7 +51,7 @@ bash scripts/install.sh --download-data    # 可选：额外预下载评测数�
 | 推理服务 IP | `--base-url http://<ip>:8000/v1` | 否（直接评测已有服务） |
 | 已有 benchmark 分数 | `--scores scores.json` | 否（跳过评测；`{benchmark_id: 分数}` JSON） |
 
-> 权重路径只需给 `--model-path`：模型名会自动取路径末段（如 `meta-llama/Llama-3-8B-Instruct` → `Llama-3-8B-Instruct`），无需再传 `--model`。`--base-url` / `--scores` 路径仍需 `--model` 作为服务里的模型名或报告里的标签。
+> 三种来源都只需给一个参数：模型名会自动推导——权重路径取末段（`meta-llama/Llama-3-8B-Instruct` → `Llama-3-8B-Instruct`）、推理服务自动探测 `/v1/models`、分数文件读 `_model` 元数据键（缺失则取文件名）。想覆盖时再传 `--model`。
 
 | `--mode` | 跑到哪一步 | 产出 |
 |---|---|---|
@@ -64,11 +64,11 @@ bash scripts/install.sh --download-data    # 可选：额外预下载评测数�
 ### ① 有权重或已部署服务 → 跑完整流程
 
 ```bash
-# 有权重：自动部署 → 评测 → 诊断 → 建议（只需给权重路径，模型名自动推导）
+# 有权重：自动部署 → 评测 → 诊断 → 建议（只需给权重路径，模型名自动取末段）
 benchmark-diagnosis run --model-path meta-llama/Llama-3-8B-Instruct
 
-# 已有推理服务 IP：跳过部署，直接评测 → 诊断 → 建议
-benchmark-diagnosis run --model my-model --base-url http://<ip>:8000/v1
+# 已有推理服务 IP：跳过部署，直接评测 → 诊断 → 建议（模型名自动探测 /v1/models）
+benchmark-diagnosis run --base-url http://<ip>:8000/v1
 ```
 
 ### ② 只想跑 benchmark（拿分数，先不诊断）
@@ -76,14 +76,14 @@ benchmark-diagnosis run --model my-model --base-url http://<ip>:8000/v1
 加 `--mode benchmark`：只评测，把分数写到 `scores.json`，之后用 `--scores` 接着跑诊断。
 
 ```bash
-benchmark-diagnosis run --model my-model --base-url http://<ip>:8000/v1 --mode benchmark
+benchmark-diagnosis run --base-url http://<ip>:8000/v1 --mode benchmark
 # → data/run_output/scores.json
 ```
 
 省时间只跑几个 benchmark：用 `--benchmarks` 逗号分隔指定子集（代表性 portfolio 的子集）。
 
 ```bash
-benchmark-diagnosis run --model my-model --base-url http://<ip>:8000/v1 \
+benchmark-diagnosis run --base-url http://<ip>:8000/v1 \
   --mode benchmark --benchmarks mmlu_pro,math,swe_bench
 ```
 
@@ -91,11 +91,11 @@ benchmark-diagnosis run --model my-model --base-url http://<ip>:8000/v1 \
 
 ### ③ 已有 benchmark 分数 → 只跑诊断
 
-用 `--scores` 跳过评测，直接诊断（默认 `full` 含建议；只要归因不要建议就加 `--mode analyze`）：
+用 `--scores` 跳过评测，直接诊断（默认 `full` 含建议；只要归因不要建议就加 `--mode analyze`）。模型名会从分数文件的 `_model` 键读取（缺失则取文件名）：
 
 ```bash
-benchmark-diagnosis run --model my-model --scores scores.json
-benchmark-diagnosis run --model my-model --scores scores.json --mode analyze   # 只要归因，不要建议
+benchmark-diagnosis run --scores scores.json
+benchmark-diagnosis run --scores scores.json --mode analyze   # 只要归因，不要建议
 ```
 
 > 没 GPU 想先看效果？用一份 JSON 分数文件代替真实评测，30 秒出结果（下面的输出就来自这条命令）：
@@ -149,10 +149,10 @@ benchmark-diagnosis run --model-path meta-llama/Llama-3-8B-Instruct
 ### 场景 B：只有推理服务 IP
 
 ```bash
-benchmark-diagnosis run --model my-model --base-url http://<ip>:8000/v1
+benchmark-diagnosis run --base-url http://<ip>:8000/v1
 ```
 
-跳过部署，直接对已有服务评测。`--model` 是服务里注册的模型名（OpenAI 兼容 API 需要它来选模型）。
+跳过部署，直接对已有服务评测。模型名会自动探测服务的 `/v1/models` 接口；想覆盖时再传 `--model`。
 
 > **没有 GPU 也想先看效果？** 用一份 JSON 分数文件代替真实评测，30 秒出结果——下面的输出就是这条命令实际生成的（`examples/output/`，可复现）：
 > ```bash

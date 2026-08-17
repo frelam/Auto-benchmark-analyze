@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+import httpx
 from rich.console import Console
 from rich.table import Table
 from sqlalchemy import select
@@ -115,10 +116,12 @@ def build_run_request(
 
     Args:
         settings: Resolved settings.
-        model: Model name reported in the output. Optional for a weights run,
-            where it is auto-derived from ``model_path`` (basename / last
-            segment of the HF id); required for ``endpoint``/``scores`` unless
-            ``run.model.name`` is set.
+        model: Model name reported in the output. Optional for all sources:
+            for ``weights`` it is auto-derived from ``model_path`` (basename /
+            last segment of the HF id); for ``endpoint`` it is auto-detected
+            from the service's ``/v1/models``; for ``scores`` it is read from
+            the file's optional ``_model`` metadata key (falling back to the
+            file stem). Set explicitly to override.
         model_path: HuggingFace weights id / local path (source ``weights``).
         base_url: Existing OpenAI-compatible endpoint (source ``endpoint``).
         scores: JSON ``{benchmark_id: score}`` file (source ``scores``; no eval).
@@ -213,8 +216,9 @@ def build_run_request(
         # segment of an HF id ("meta-llama/Llama-3-8B-Instruct" ->
         # "Llama-3-8B-Instruct") or the basename of a local path.
         resolved_model = resolved_model_path.rstrip("/").rsplit("/", 1)[-1]
-    if resolved_model is None:
-        raise ValueError("a model name is required: pass --model (or set run.model.name)")
+    # For endpoint / scores paths, resolved_model may stay None and is
+    # resolved later in execute_run: the endpoint path probes /v1/models and
+    # the scores path reads the optional _model metadata key from the file.
 
     # Benchmark subset: CLI wins over config; an empty list reads as "no
     # constraint" so a YAML `benchmarks: []` is the same as unset. Ignored for
@@ -311,6 +315,35 @@ def execute_run(
                 "no model source in request; expected weights|endpoint|scores"
             )
 
+        # Resolve the model name when --model was omitted. The weights path
+        # already derives it from model_path in build_run_request; the endpoint
+        # path probes /v1/models and the scores path reads the _model metadata
+        # key from the file (falling back to the file stem).
+        if not request.model:
+            if source == "endpoint" and base_url:
+                detected = detect_served_model(base_url)
+                if detected:
+                    console.print(f"[cyan]Auto-detected served model:[/] {detected}")
+                    request.model = detected
+                else:
+                    request.model = "served-model"
+                    console.print(
+                        f"[yellow]Could not read a model id from {base_url}/models; "
+                        f"using '{request.model}'. Pass --model to override.[/]"
+                    )
+            elif source == "scores" and request.scores_file is not None:
+                from_file = read_scores_model(request.scores_file)
+                if from_file:
+                    console.print(f"[cyan]Model from scores file:[/] {from_file}")
+                    request.model = from_file
+                else:
+                    request.model = request.scores_file.stem
+                    console.print(
+                        f"[yellow]No --model and no _model key in the scores file; "
+                        f"using '{request.model}' (file stem). Pass --model to "
+                        f"override.[/]"
+                    )
+
         raw_scores = _collect_scores(request, base_url, portfolio_ids, run_harness, settings)
 
         if raw_scores and not (portfolio_ids & set(raw_scores)):
@@ -329,8 +362,11 @@ def execute_run(
             )
             scores_path = scores_path.parent / "scores.json"
             scores_path.parent.mkdir(parents=True, exist_ok=True)
+            scores_payload: dict[str, Any] = dict(raw_scores)
+            if request.model:
+                scores_payload["_model"] = request.model
             scores_path.write_text(
-                json.dumps(raw_scores, indent=2, ensure_ascii=False),
+                json.dumps(scores_payload, indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
             console.print(
@@ -412,6 +448,48 @@ def portfolio_benchmarks(session: Session) -> list[str]:
         for b in pf.get("benchmarks", []):
             benchmarks.add(b["benchmark_id"])
     return sorted(benchmarks)
+
+
+def detect_served_model(base_url: str, *, timeout: float = 10.0) -> str | None:
+    """Probe an OpenAI-compatible ``/v1/models`` endpoint for the served model id.
+
+    Used to auto-derive the model name on the ``endpoint`` path when the user
+    passes only ``--base-url``. Returns the first model id in the response, or
+    ``None`` if the endpoint is unreachable / returns no models.
+    """
+    url = f"{base_url.rstrip('/')}/models"
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.get(url)
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+    except (httpx.HTTPError, ValueError):
+        return None
+    models = data.get("data") if isinstance(data, dict) else data
+    if not isinstance(models, list):
+        return None
+    for m in models:
+        if isinstance(m, dict) and m.get("id"):
+            return str(m["id"])
+        if isinstance(m, str):
+            return m
+    return None
+
+
+def read_scores_model(scores_path: Path) -> str | None:
+    """Return the optional ``_model`` metadata field from a scores JSON file.
+
+    The scores file convention reserves ``_``-prefixed keys for metadata
+    (e.g. ``_note``, ``_model``). Used to auto-derive the model name on the
+    ``scores`` path when the user passes only ``--scores``.
+    """
+    try:
+        payload = json.loads(scores_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    model = payload.get("_model") if isinstance(payload, dict) else None
+    return str(model) if model else None
 
 
 def get_or_build_model(

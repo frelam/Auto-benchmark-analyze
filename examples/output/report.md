@@ -2,7 +2,7 @@
 
 - **model_id**: `llama-3-8b`
 - **arch**: dense | total_params: 8.000 | active_params: 8.000
-- **generated_at**: 2026-08-17T12:02:51.478610
+- **generated_at**: 2026-08-17T13:04:48.683518
 - **mode**: full | **advisor**: rules
 - **asset versions**: coverage=`coverage-20260814084434-3e725b` portfolio=`portfolio-20260814084434-ecae13` curves=`curves-20260814084434-ee521f` experience=`None`
 

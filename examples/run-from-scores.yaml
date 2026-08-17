@@ -3,13 +3,13 @@
 #
 #   benchmark-diagnosis --config examples/run-from-scores.yaml run
 #
-# Or the equivalent CLI-arg form (no config file):
-#   benchmark-diagnosis run --model llama-3-8b --scores examples/scores.json \
-#     --arch dense --params 8 --release-date 2024-04-01
+# Or the equivalent CLI-arg form (no config file). --model is optional: it is
+# read from the optional _model key in the scores file (and falls back to the
+# file stem). Pass --model explicitly to override:
+#   benchmark-diagnosis run --scores examples/scores.json
 run:
   mode: full                  # full = eval + analysis + recommendations
   model:
-    name: llama-3-8b
     arch: dense
     params: 8
     release_date: "2024-04-01"

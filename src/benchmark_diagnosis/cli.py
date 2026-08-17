@@ -276,8 +276,10 @@ def run(
     ctx: typer.Context,
     model: str = typer.Option(
         None, "--model",
-        help="Model name reported in the output. Optional for weights (auto-derived "
-             "from --model-path); required for --base-url / --scores unless set in config.",
+        help="Model name reported in the output. Optional for all sources — "
+             "auto-derived from --model-path (weights), the service's /v1/models "
+             "(--base-url), or the scores file's _model key (--scores; falls back "
+             "to the file stem). Pass explicitly to override.",
     ),
     model_path: str = typer.Option(
         None, "--model-path",
@@ -321,9 +323,11 @@ def run(
     ``full`` (eval + diagnosis + recommendations, default). The diagnosis in
     ``analyze``/``full`` always runs the unified stages 1-7 intelligent
     pipeline; ``--mode analyze`` skips Stage 6 suggestions. ``--benchmarks``
-    narrows the evaluation to a subset of the representative portfolio. For a
-    weights run, ``--model`` is optional and auto-derived from ``--model-path``
-    (the basename / last segment of the HF id).
+    narrows the evaluation to a subset of the representative portfolio.
+    ``--model`` is optional for all sources — auto-derived from ``--model-path``
+    (basename / last segment of the HF id), the service's ``/v1/models``
+    (``--base-url``), or the scores file's ``_model`` key (``--scores``;
+    falls back to the file stem). Pass ``--model`` explicitly to override.
     """
     settings: Settings = ctx.obj
     benchmark_list = (

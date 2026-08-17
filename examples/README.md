@@ -17,10 +17,12 @@ or manually:
 benchmark-diagnosis --config examples/run-from-scores.yaml run
 ```
 
-The same run, as pure CLI arguments (input form #2 — no config file):
+The same run, as pure CLI arguments (input form #2 — no config file). `--model`
+is optional; it is read from the scores file's `_model` key (and falls back to
+the file stem) — pass it explicitly to override:
 
 ```bash
-benchmark-diagnosis run --model llama-3-8b --scores examples/scores.json \
+benchmark-diagnosis run --scores examples/scores.json \
   --arch dense --params 8 --release-date 2024-04-01
 ```
 
@@ -38,8 +40,10 @@ section. The three profiles show the three model sources:
 
 The model source is auto-derived: exactly one of `--model-path` (weights),
 `--base-url` (endpoint), or `--scores` (scores) must be provided — pass two and
-the tool refuses with a clear error. For a weights run, `--model` is optional
-and auto-derived from `--model-path` (the basename / last segment of the HF id).
+the tool refuses with a clear error. The model name is also auto-derived for
+all three sources: from `--model-path` (basename / last segment of the HF id),
+from the service's `/v1/models` (endpoint), or from the scores file's `_model`
+key (falling back to the file stem). Pass `--model` explicitly to override.
 
 ## The three modes
 

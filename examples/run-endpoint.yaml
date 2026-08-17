@@ -4,12 +4,12 @@
 #
 #   benchmark-diagnosis --config examples/run-endpoint.yaml run
 #
-# Equivalent CLI-arg form:
-#   benchmark-diagnosis run --model qwen-2.5-72b --base-url http://10.0.0.5:8000/v1
+# Equivalent CLI-arg form. --model is optional: it is auto-detected by probing
+# the service's /v1/models endpoint. Pass --model explicitly to override:
+#   benchmark-diagnosis run --base-url http://10.0.0.5:8000/v1
 run:
   mode: full
   model:
-    name: qwen-2.5-72b
     arch: dense
     params: 72
     source: endpoint
