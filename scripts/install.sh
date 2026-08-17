@@ -95,7 +95,7 @@ Next steps:
   benchmark-diagnosis --config examples/run-from-scores.yaml run
 
   # Full run: auto-deploy weights, evaluate, analyze, and advise:
-  benchmark-diagnosis run --model-id meta-llama/Llama-3.1-8B --mode full
+  benchmark-diagnosis run --model-path meta-llama/Llama-3.1-8B --mode full
 
   # Reuse an existing inference service instead:
   benchmark-diagnosis run --model my-model --base-url http://10.0.0.5:8000/v1 --mode full

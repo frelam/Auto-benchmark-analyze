@@ -19,6 +19,6 @@ run:
     arch: dense
     params: 72
     source: weights                    # weights -> vLLM auto-deploy
-    weights: Qwen/Qwen2.5-72B-Instruct
+    model_path: Qwen/Qwen2.5-72B-Instruct
   output:
     dir: examples/output

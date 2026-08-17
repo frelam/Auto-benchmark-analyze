@@ -126,7 +126,7 @@ def test_execute_run_benchmark_mode_writes_scores_and_skips_diagnosis(run_env):
     settings, tmp_path, scores_path = run_env
     request = RunRequest(
         model="llama-3-8b", mode="benchmark", source="weights",
-        weights="meta-llama/Llama-3-8B",
+        model_path="meta-llama/Llama-3-8B",
     )
     proc = _StubProc()
     result = execute_run(
@@ -151,7 +151,7 @@ def test_execute_run_benchmark_mode_writes_scores_and_skips_diagnosis(run_env):
 def test_build_run_request_accepts_benchmark_mode(run_env):
     settings, tmp_path, scores_path = run_env
     request = build_run_request(
-        settings, model_id="meta-llama/Llama-3-8B", mode="benchmark"
+        settings, model_path="meta-llama/Llama-3-8B", mode="benchmark"
     )
     assert request.mode == "benchmark"
     assert request.source == "weights"
@@ -160,7 +160,7 @@ def test_build_run_request_accepts_benchmark_mode(run_env):
 def test_execute_run_weights_path_deploys_and_tears_down(run_env, monkeypatch):
     settings, tmp_path, scores_path = run_env
     request = RunRequest(
-        model="llama-3-8b", source="weights", weights="meta-llama/Llama-3-8B"
+        model="llama-3-8b", source="weights", model_path="meta-llama/Llama-3-8B"
     )
     proc = _StubProc()
     called: list[str] = []
@@ -187,7 +187,7 @@ def test_execute_run_weights_path_deploys_and_tears_down(run_env, monkeypatch):
 def test_execute_run_deploy_failure_tears_down(run_env):
     settings, tmp_path, scores_path = run_env
     request = RunRequest(
-        model="llama-3-8b", source="weights", weights="meta-llama/Llama-3-8B"
+        model="llama-3-8b", source="weights", model_path="meta-llama/Llama-3-8B"
     )
     proc = _StubProc()
 
@@ -219,7 +219,7 @@ def test_build_run_request_benchmarks_cli_overrides_config(run_env):
     settings, tmp_path, scores_path = run_env
     settings.run.model.benchmarks = ["mmlu_pro", "gsm8k"]
     request = build_run_request(
-        settings, model_id="meta-llama/Llama-3-8B", benchmarks=["math", "swe_bench"]
+        settings, model_path="meta-llama/Llama-3-8B", benchmarks=["math", "swe_bench"]
     )
     assert request.benchmarks == ["math", "swe_bench"]
 
@@ -227,7 +227,7 @@ def test_build_run_request_benchmarks_cli_overrides_config(run_env):
 def test_build_run_request_benchmarks_from_config(run_env):
     settings, tmp_path, scores_path = run_env
     settings.run.model.benchmarks = ["mmlu_pro", "math"]
-    request = build_run_request(settings, model_id="meta-llama/Llama-3-8B")
+    request = build_run_request(settings, model_path="meta-llama/Llama-3-8B")
     assert request.benchmarks == ["mmlu_pro", "math"]
 
 
@@ -249,7 +249,7 @@ def test_build_run_request_benchmarks_ignored_on_scores_path(run_env):
 def test_build_run_request_benchmarks_empty_list_is_unset(run_env):
     settings, tmp_path, scores_path = run_env
     settings.run.model.benchmarks = []
-    request = build_run_request(settings, model_id="meta-llama/Llama-3-8B")
+    request = build_run_request(settings, model_path="meta-llama/Llama-3-8B")
     assert request.benchmarks is None
 
 
@@ -258,7 +258,7 @@ def test_execute_run_benchmarks_subset_limits_eval_tasks(run_env):
     request = RunRequest(
         model="llama-3-8b",
         source="weights",
-        weights="meta-llama/Llama-3-8B",
+        model_path="meta-llama/Llama-3-8B",
         benchmarks=["mmlu_pro", "math", "swe_bench"],
     )
     captured: list[list[str]] = []
@@ -316,10 +316,29 @@ def test_build_run_request_from_config_scores(run_env):
 
 def test_build_run_request_weights_defaults_model(run_env):
     settings, tmp_path, scores_path = run_env
-    request = build_run_request(settings, model_id="meta-llama/Llama-3-8B")
+    # --model is optional for weights: auto-derived as the basename of model_path.
+    request = build_run_request(settings, model_path="meta-llama/Llama-3-8B")
     assert request.source == "weights"
-    assert request.model == "meta-llama/Llama-3-8B"
-    assert request.weights == "meta-llama/Llama-3-8B"
+    assert request.model == "Llama-3-8B"
+    assert request.model_path == "meta-llama/Llama-3-8B"
+
+
+def test_build_run_request_weights_local_path_derives_model(run_env):
+    settings, tmp_path, scores_path = run_env
+    # A local filesystem path also derives a clean model name from its basename.
+    request = build_run_request(settings, model_path="/data/models/my-model/")
+    assert request.source == "weights"
+    assert request.model == "my-model"
+    assert request.model_path == "/data/models/my-model/"
+
+
+def test_build_run_request_weights_explicit_model_wins(run_env):
+    settings, tmp_path, scores_path = run_env
+    # An explicit --model still takes precedence over the derived basename.
+    request = build_run_request(
+        settings, model="llama-3-8b", model_path="meta-llama/Llama-3-8B"
+    )
+    assert request.model == "llama-3-8b"
 
 
 def test_build_run_request_cli_overrides_config_source(run_env):

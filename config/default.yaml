@@ -75,9 +75,9 @@ recommendation:
 run:
   mode: full                  # benchmark (eval only, writes scores.json) | analyze (eval + diagnosis) | full (eval + diagnosis + recommendations)
   model:
-    name: null                # logical model id/name (required for run)
+    name: null                # logical model id/name (auto-derived from model_path for weights)
     source: null              # weights | endpoint | scores (null => auto-detect)
-    weights: null             # HF id or local path (source=weights -> auto-deploy)
+    model_path: null          # HF id or local weights path (source=weights -> auto-deploy)
     base_url: null            # OpenAI-compatible /v1 endpoint (source=endpoint)
     scores_file: null         # JSON {benchmark_id: score} (source=scores, skip eval)
     benchmarks: null          # null => full representative portfolio; or a subset like [mmlu_pro, math]

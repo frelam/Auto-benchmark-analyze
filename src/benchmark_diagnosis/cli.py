@@ -276,10 +276,12 @@ def run(
     ctx: typer.Context,
     model: str = typer.Option(
         None, "--model",
-        help="Model name reported in the output (defaults to --model-id for weights).",
+        help="Model name reported in the output. Optional for weights (auto-derived "
+             "from --model-path); required for --base-url / --scores unless set in config.",
     ),
-    model_id: str = typer.Option(
-        None, "--model-id", help="HF weights id or local path to auto-deploy (source: weights).",
+    model_path: str = typer.Option(
+        None, "--model-path",
+        help="HuggingFace weights id or local weights path to auto-deploy (source: weights).",
     ),
     base_url: str = typer.Option(
         None, "--base-url", help="Existing OpenAI-compatible endpoint / inference service IP.",
@@ -310,16 +312,18 @@ def run(
 ) -> None:
     """One command: deploy or reuse an endpoint, evaluate, diagnose, advise.
 
-    Exactly one model source must be provided — ``--model-id`` (auto-deploys via
-    vLLM), ``--base-url`` (reuse an inference service), or ``--scores`` (a JSON
-    scores file, no evaluation). Source, mode, and advisor can also come from a
-    YAML config via ``--config``. ``--mode`` picks how far the pipeline goes:
-    ``benchmark`` (eval only, writes ``scores.json`` — feed it back with
+    Exactly one model source must be provided — ``--model-path`` (auto-deploys
+    via vLLM), ``--base-url`` (reuse an inference service), or ``--scores`` (a
+    JSON scores file, no evaluation). Source, mode, and advisor can also come
+    from a YAML config via ``--config``. ``--mode`` picks how far the pipeline
+    goes: ``benchmark`` (eval only, writes ``scores.json`` — feed it back with
     ``--scores``), ``analyze`` (eval + diagnosis, no recommendations), or
     ``full`` (eval + diagnosis + recommendations, default). The diagnosis in
     ``analyze``/``full`` always runs the unified stages 1-7 intelligent
     pipeline; ``--mode analyze`` skips Stage 6 suggestions. ``--benchmarks``
-    narrows the evaluation to a subset of the representative portfolio.
+    narrows the evaluation to a subset of the representative portfolio. For a
+    weights run, ``--model`` is optional and auto-derived from ``--model-path``
+    (the basename / last segment of the HF id).
     """
     settings: Settings = ctx.obj
     benchmark_list = (
@@ -330,7 +334,7 @@ def run(
     result = _run_or_exit(
         settings,
         model=model,
-        model_id=model_id,
+        model_path=model_path,
         base_url=base_url,
         scores=scores,
         mode=mode,

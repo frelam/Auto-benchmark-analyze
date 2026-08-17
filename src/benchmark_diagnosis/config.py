@@ -85,7 +85,7 @@ class RunModelConfig(BaseModel):
     ``source`` selects where the evaluated model comes from: ``weights``
     (auto-deploy via vLLM), ``endpoint`` (an existing OpenAI-compatible
     inference service IP), or ``scores`` (skip evaluation, read a JSON scores
-    file). When ``None`` it is auto-derived from whichever of ``weights`` /
+    file). When ``None`` it is auto-derived from whichever of ``model_path`` /
     ``base_url`` / ``scores_file`` is set.
 
     ``benchmarks`` optionally narrows the evaluation to a subset of the
@@ -96,7 +96,7 @@ class RunModelConfig(BaseModel):
 
     name: str | None = None
     source: Literal["weights", "endpoint", "scores"] | None = None
-    weights: str | None = None
+    model_path: str | None = None
     base_url: str | None = None
     scores_file: str | None = None
     benchmarks: list[str] | None = None

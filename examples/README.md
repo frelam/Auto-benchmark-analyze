@@ -36,9 +36,10 @@ section. The three profiles show the three model sources:
 | `run-endpoint.yaml` | `endpoint` (service IP) | the OpenAI-compatible harness path is selected automatically |
 | `run-full-llm.yaml` | `weights` (HF id) | the tool auto-deploys with vLLM, then evaluates |
 
-The model source is auto-derived: exactly one of `--model-id` (weights),
+The model source is auto-derived: exactly one of `--model-path` (weights),
 `--base-url` (endpoint), or `--scores` (scores) must be provided — pass two and
-the tool refuses with a clear error.
+the tool refuses with a clear error. For a weights run, `--model` is optional
+and auto-derived from `--model-path` (the basename / last segment of the HF id).
 
 ## The three modes
 

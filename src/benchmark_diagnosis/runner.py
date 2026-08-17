@@ -67,7 +67,7 @@ class RunRequest:
     model: str | None = None
     mode: str = "full"
     source: Literal["weights", "endpoint", "scores"] | None = None
-    weights: str | None = None
+    model_path: str | None = None
     base_url: str | None = None
     scores_file: Path | None = None
     benchmarks: list[str] | None = None
@@ -95,7 +95,7 @@ def build_run_request(
     settings: Settings,
     *,
     model: str | None = None,
-    model_id: str | None = None,
+    model_path: str | None = None,
     base_url: str | None = None,
     scores: str | Path | None = None,
     mode: str | None = None,
@@ -109,15 +109,17 @@ def build_run_request(
     """Merge CLI arguments over the config's ``run`` profile into a run request.
 
     Precedence is **CLI argument > ``settings.run.model.*``**. The model source
-    is derived from whichever of scores / base_url / weights is present; passing
-    more than one on the CLI, or configuring more than one source field, raises
-    ``ValueError`` (the sources are mutually exclusive).
+    is derived from whichever of scores / base_url / model_path is present;
+    passing more than one on the CLI, or configuring more than one source
+    field, raises ``ValueError`` (the sources are mutually exclusive).
 
     Args:
         settings: Resolved settings.
-        model: Model name reported in the output (defaults to the weights id for
-            a weights run, else ``run.model.name``).
-        model_id: HuggingFace weights id / local path (source ``weights``).
+        model: Model name reported in the output. Optional for a weights run,
+            where it is auto-derived from ``model_path`` (basename / last
+            segment of the HF id); required for ``endpoint``/``scores`` unless
+            ``run.model.name`` is set.
+        model_path: HuggingFace weights id / local path (source ``weights``).
         base_url: Existing OpenAI-compatible endpoint (source ``endpoint``).
         scores: JSON ``{benchmark_id: score}`` file (source ``scores``; no eval).
         mode: ``"benchmark"`` (eval only), ``"analyze"`` (eval + diagnosis, no
@@ -145,28 +147,28 @@ def build_run_request(
         for kind, value in (
             ("scores", scores is not None),
             ("endpoint", base_url is not None),
-            ("weights", model_id is not None),
+            ("weights", model_path is not None),
         )
         if value
     ]
     if len(cli_provided) > 1:
         raise ValueError(
             "ambiguous model source: provide exactly one of "
-            "--scores / --base-url / --model-id"
+            "--scores / --base-url / --model-path"
         )
 
     if cli_provided:
         source: str | None = cli_provided[0]
         resolved_scores = Path(scores) if scores is not None else None
         resolved_base_url = base_url
-        resolved_weights = model_id
+        resolved_model_path = model_path
     else:
         cfg_provided = [
             kind
             for kind, value in (
                 ("scores", cfg.scores_file is not None),
                 ("endpoint", cfg.base_url is not None),
-                ("weights", cfg.weights is not None),
+                ("weights", cfg.model_path is not None),
             )
             if value
         ]
@@ -175,11 +177,11 @@ def build_run_request(
         source = cfg_provided[0] if cfg_provided else cfg.source
         resolved_scores = Path(cfg.scores_file) if cfg.scores_file else None
         resolved_base_url = cfg.base_url
-        resolved_weights = cfg.weights
+        resolved_model_path = cfg.model_path
 
     if source is None:
         raise ValueError(
-            "no model source: pass --scores / --base-url / --model-id, "
+            "no model source: pass --scores / --base-url / --model-path, "
             "or set run.model.source in the config"
         )
     if source == "scores" and resolved_scores is None:
@@ -190,9 +192,9 @@ def build_run_request(
         raise ValueError(
             "source=endpoint requires a base_url (--base-url or run.model.base_url)"
         )
-    if source == "weights" and resolved_weights is None:
+    if source == "weights" and resolved_model_path is None:
         raise ValueError(
-            "source=weights requires weights (--model-id or run.model.weights)"
+            "source=weights requires weights (--model-path or run.model.model_path)"
         )
 
     resolved_mode = mode or settings.run.mode
@@ -206,8 +208,11 @@ def build_run_request(
         )
 
     resolved_model = model or cfg.name
-    if resolved_model is None and source == "weights":
-        resolved_model = resolved_weights
+    if resolved_model is None and source == "weights" and resolved_model_path is not None:
+        # Auto-derive a clean model name from the weights path: the last
+        # segment of an HF id ("meta-llama/Llama-3-8B-Instruct" ->
+        # "Llama-3-8B-Instruct") or the basename of a local path.
+        resolved_model = resolved_model_path.rstrip("/").rsplit("/", 1)[-1]
     if resolved_model is None:
         raise ValueError("a model name is required: pass --model (or set run.model.name)")
 
@@ -228,7 +233,7 @@ def build_run_request(
         model=resolved_model,
         mode=resolved_mode,
         source=source,
-        weights=resolved_weights,
+        model_path=resolved_model_path,
         base_url=resolved_base_url,
         scores_file=resolved_scores,
         benchmarks=resolved_benchmarks,
@@ -292,7 +297,7 @@ def execute_run(
         source = request.source
         if source == "weights":
             base_url = f"http://{settings.serving.host}:{settings.serving.port}/v1"
-            cmd = serve_command(request.weights, settings.serving)
+            cmd = serve_command(request.model_path, settings.serving)
             console.print("[cyan]Deploying weights...[/] " + " ".join(cmd))
             proc = deploy_weights(cmd)
             if not wait_ready(base_url):

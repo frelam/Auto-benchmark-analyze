@@ -47,9 +47,11 @@ bash scripts/install.sh --download-data    # 可选：额外预下载评测数�
 
 | 模型来源 | 参数 | 是否需要 GPU |
 |---|---|---|
-| 模型权重 | `--model-id meta-llama/Llama-3-8B-Instruct` | 是（自动 vLLM 部署 → 评测） |
+| 模型权重 | `--model-path meta-llama/Llama-3-8B-Instruct` | 是（自动 vLLM 部署 → 评测） |
 | 推理服务 IP | `--base-url http://<ip>:8000/v1` | 否（直接评测已有服务） |
 | 已有 benchmark 分数 | `--scores scores.json` | 否（跳过评测；`{benchmark_id: 分数}` JSON） |
+
+> 权重路径只需给 `--model-path`：模型名会自动取路径末段（如 `meta-llama/Llama-3-8B-Instruct` → `Llama-3-8B-Instruct`），无需再传 `--model`。`--base-url` / `--scores` 路径仍需 `--model` 作为服务里的模型名或报告里的标签。
 
 | `--mode` | 跑到哪一步 | 产出 |
 |---|---|---|
@@ -62,8 +64,8 @@ bash scripts/install.sh --download-data    # 可选：额外预下载评测数�
 ### ① 有权重或已部署服务 → 跑完整流程
 
 ```bash
-# 有权重：自动部署 → 评测 → 诊断 → 建议
-benchmark-diagnosis run --model llama-3-8b --model-id meta-llama/Llama-3-8B-Instruct
+# 有权重：自动部署 → 评测 → 诊断 → 建议（只需给权重路径，模型名自动推导）
+benchmark-diagnosis run --model-path meta-llama/Llama-3-8B-Instruct
 
 # 已有推理服务 IP：跳过部署，直接评测 → 诊断 → 建议
 benchmark-diagnosis run --model my-model --base-url http://<ip>:8000/v1
@@ -85,7 +87,7 @@ benchmark-diagnosis run --model my-model --base-url http://<ip>:8000/v1 \
   --mode benchmark --benchmarks mmlu_pro,math,swe_bench
 ```
 
-> `--benchmarks` 只在评测路径（`--model-id` / `--base-url`）生效；`--scores` 路径会忽略它（分数文件自带 benchmark 列表，会提前提示）。每样本数 cap 用 `evaluation.limit` 配置（debug 用）。
+> `--benchmarks` 只在评测路径（`--model-path` / `--base-url`）生效；`--scores` 路径会忽略它（分数文件自带 benchmark 列表，会提前提示）。每样本数 cap 用 `evaluation.limit` 配置（debug 用）。
 
 ### ③ 已有 benchmark 分数 → 只跑诊断
 
@@ -115,13 +117,13 @@ benchmark-diagnosis run --model my-model --scores scores.json --mode analyze   #
 
 ### 诊断管线与反馈回路
 
-`run`（`analyze` / `full`）走统一诊断管线 Stage 0-7：簇级判定聚合 → 候选能力生成 → probe 单项复测（pass@1/pass@k）→ 引导式 bad case 归因（content/format/grading）→ 置信度融合（High/Medium/Low）→ 优先级排序（ExpectedGain/Cost）→ 建议文案 → 反馈校准。`--mode analyze` 跳过 Stage 6 建议文案。执行建议后用反馈回路校准 Stage 5 的 Cost/Gain 估计（跑得越久排得越准）：
+`run`（`analyze` / `full`）走统一诊断管线 Stage 0-7：簇级判定聚合 → 候选能力生成 → probe 单项复测（pass@1/pass@k）→ 引导式 bad case 归因（content/format/grading）→ 置信度融合（High/Medium/Low）→ 优先级排序（ExpectedGain/Cost）→ 建议文案 → 反馈校准。`--mode analyze` 跳过 Stage 6 建议文案。
+
+> **所有诊断参数已内置最优默认值**（采样数、阈值、pass@k 配置、cost 表等，见 `config/default.yaml` 的 `diagnosis:` 段），开箱即用、无需调参——给一个模型，直接出结果。反馈回路也是可选的：只有当你执行过建议、想把"预测收益 vs 实际收益"回灌进来校准 Stage 5 的 Cost/Gain 估计时才用（默认平滑系数 0.5，跑得越久排得越准）：
 
 ```bash
-benchmark-diagnosis feedback log reasoning.math.calculation rejection_sampling \
-  --predicted-gain 0.4 --actual-gain 0.35 --predicted-cost 1.0 --actual-cost 1.5
-benchmark-diagnosis feedback recalibrate        # 重估 cost 比例 + gain 缩放
 benchmark-diagnosis feedback list               # 查看执行记录
+benchmark-diagnosis feedback recalibrate        # 重估 cost 比例 + gain 缩放（默认平滑 0.5）
 ```
 
 想手动重建离线资产 / 出图表归档：
@@ -139,10 +141,10 @@ benchmark-diagnosis visualize --out results      # 把离线资产渲染成图�
 ### 场景 A：只有模型权重（需 GPU）
 
 ```bash
-benchmark-diagnosis run --model llama-3-8b --model-id meta-llama/Llama-3-8B-Instruct
+benchmark-diagnosis run --model-path meta-llama/Llama-3-8B-Instruct
 ```
 
-自动完成：拉取权重 → vLLM 部署并等待就绪 → 跑代表性 benchmark 组合 → 诊断 → 建议 → 写报告。
+只需给权重路径，模型名自动取末段（`Llama-3-8B-Instruct`）。自动完成：拉取权重 → vLLM 部署并等待就绪 → 跑代表性 benchmark 组合 → 诊断 → 建议 → 写报告。
 
 ### 场景 B：只有推理服务 IP
 
@@ -150,7 +152,7 @@ benchmark-diagnosis run --model llama-3-8b --model-id meta-llama/Llama-3-8B-Inst
 benchmark-diagnosis run --model my-model --base-url http://<ip>:8000/v1
 ```
 
-跳过部署，直接对已有服务评测。
+跳过部署，直接对已有服务评测。`--model` 是服务里注册的模型名（OpenAI 兼容 API 需要它来选模型）。
 
 > **没有 GPU 也想先看效果？** 用一份 JSON 分数文件代替真实评测，30 秒出结果——下面的输出就是这条命令实际生成的（`examples/output/`，可复现）：
 > ```bash
