@@ -1,0 +1,71 @@
+src/benchmark_diagnosis/config.py
+  s_0f1224f6d24ec2::t_b85bea0bc4f2db 90-94,102
+  s_0f1224f6d24ec2::t_144051b01c2a89 113
+src/benchmark_diagnosis/runner.py
+  s_0f1224f6d24ec2::t_78c307d93c9601 214-220,225-226,234
+  s_0f1224f6d24ec2::t_e64ac5d0e7d7e2 128-132
+  s_0f1224f6d24ec2::t_b405f3207a227b 61-64
+  s_0f1224f6d24ec2::t_a30e768a1a8a77 123-124
+  s_0f1224f6d24ec2::t_af8885eebe16e7 318-344
+  s_0f1224f6d24ec2::t_a3c2cf83e5fee6 73
+  s_0f1224f6d24ec2::t_7e0b0ec09fcf0b 472-475
+  s_0f1224f6d24ec2::t_219f3ba5900cd8 106
+  s_0f1224f6d24ec2::t_9abcccee60f7f1 272-279
+  s_0f1224f6d24ec2::t_fe519ab64f2192 221-224
+  s_0f1224f6d24ec2::t_5f77a4e18fe566 199-202
+  s_0f1224f6d24ec2::t_6e077706b38745 458,460,476,482-501
+  s_0f1224f6d24ec2::t_53d85f80f083a4 502-503
+examples/output/metrics.json
+  s_0f1224f6d24ec2::t_19d9d80a9706b6 10,14-17,31-34,40-43,48-49,62-65,71-74,79-80,93-96,101-144,146-222,224-439,441-447,449-452,455-461,463-475,477-489,491-494,496-544,546-550,552
+examples/README.md
+  s_0f1224f6d24ec2::t_c6149354add391 43
+  s_0f1224f6d24ec2::t_218b6bd4a20875 49
+config/default.yaml
+  s_0f1224f6d24ec2::t_4367a85f67547f 76
+  s_0f1224f6d24ec2::t_1db633b43569a8 83
+examples/output/report.md
+  s_0f1224f6d24ec2::t_19d9d80a9706b6 5,7,26,39,51,55-98
+  s_0f1224f6d24ec2::t_899e59e78c993c 99
+src/benchmark_diagnosis/cli.py
+  s_0f1224f6d24ec2::t_168235bbdf7d5f 301-306,321-322,325-329,341
+  s_0f1224f6d24ec2::t_987d5659a0690c 316-320
+  s_0f1224f6d24ec2::t_60e8271d653511 93-100
+  s_0f1224f6d24ec2::t_9dd9f4fb08e0b8 291-293
+README.md
+  s_0f1224f6d24ec2::t_7754e8df9af517 46-62,65,67-69,72-74,77-78,90,92,95-96,99-102,104-118,127-130
+  s_0f1224f6d24ec2::t_6496e1aaaa64a4 81,84-85,88-89
+  s_0f1224f6d24ec2::t_676185427f0369 131-132
+tests/test_runner.py
+  s_0f1224f6d24ec2::t_42fc056505eef8 273
+  s_0f1224f6d24ec2::t_9f36cadc809385 218-272,274-283
+  s_0f1224f6d24ec2::t_d77349a55b0638 125-159
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "f5c0302ab77b98f7df679e311ea90c4440c007f7",
+  "prompts": {},
+  "sessions": {
+    "s_0f1224f6d24ec2": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a82f5603286b8e10f3d32ba",
+        "model": "glm-5.2"
+      },
+      "human_author": "lvhaoyu <lvhaoyu@huawei.com>",
+      "custom_attributes": {
+        "client_type": "ide",
+        "tool_use_id": "6a82fadc3286b8e10f3d33d2",
+        "dedupe_key": "6a82f5603286b8e10f3d32ba:6a82fadc3286b8e10f3d33d2:afterEdit:5a327336",
+        "tool_type": "builtin",
+        "runtime_client": "trae-tob-git-ai",
+        "tool_id": "icube:applyChatSnapshotPatch",
+        "edit_kind": "file_edit",
+        "source_scene": "agent",
+        "session_id": "6a82f5603286b8e10f3d32ba",
+        "operation_id": "6a82fadc3286b8e10f3d33d2",
+        "external_session_id": "6a82f5603286b8e10f3d32ba"
+      }
+    }
+  }
+}
