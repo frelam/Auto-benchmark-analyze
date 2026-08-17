@@ -8,7 +8,7 @@
 2. **诊断**：判断每个能力簇"是否不及预期"，并切片定位低分子类、用固定 taxonomy 分析失败模式；
 3. **建议**：根据 benchmark 相关性 + bad case 归因出"缺什么能力"，从工具维护的经验库（具体数据集 + 调参 knob + 历史效果）给出**可执行**建议，可选 LLM 重排，输出**可追溯、可验证**的优化建议。
 
-完整设计见 `benchmark-diagnosis-tool-design.md`，技术选型见 [`ARCHITECTURE.md`](ARCHITECTURE.md)。
+完整设计见 `benchmark-diagnosis-tool-design.md`，智能诊断（Stages 1-7）设计见 [`docs/intelligent-diagnosis-v2-design.md`](docs/intelligent-diagnosis-v2-design.md)，技术选型见 [`ARCHITECTURE.md`](ARCHITECTURE.md)。
 
 ---
 
@@ -62,6 +62,26 @@ benchmark-diagnosis run --model my-model --base-url http://<ip>:8000/v1
 ```bash
 benchmark-diagnosis --config examples/run-from-scores.yaml run   # 用分数文件跑全流程（无需 GPU）
 benchmark-diagnosis visualize --out results                      # 把离线资产渲染成图表归档到 results/
+```
+
+### 智能诊断（Stages 1-7，可选）
+
+在常规"簇级诊断 + 经验库建议"之上，`--intelligent` 开启 v2 智能诊断管线：
+候选能力生成（item 级 sub-accuracy / benchmark 级标签）→ probe 单项复测（含 pass@1/pass@k）
+→ 引导式 bad case 分析（content/format/grading 归因）→ 置信度融合（High/Medium/Low）
+→ 优先级排序（ExpectedGain / Cost）→ 具体建议文案，报告追加"智能诊断"章节：
+
+```bash
+benchmark-diagnosis --config examples/run-from-scores.yaml run --intelligent
+```
+
+执行建议后，用反馈回路校准 Stage 5 的 Cost/Gain 估计（跑得越久排得越准）：
+
+```bash
+benchmark-diagnosis feedback log reasoning.math.calculation rejection_sampling \
+  --predicted-gain 0.4 --actual-gain 0.35 --predicted-cost 1.0 --actual-cost 1.5
+benchmark-diagnosis feedback recalibrate        # 重估 cost 比例 + gain 缩放
+benchmark-diagnosis feedback list               # 查看执行记录
 ```
 
 ---

@@ -42,6 +42,20 @@ diagnosis:
   sample_size: 50              # failed cases sampled per low sub-capability
   taxonomy_path: null          # null => packaged taxonomy
 
+  # Intelligent diagnosis pipeline (design doc v2). Opt-in via
+  # `--intelligent` / this flag: Stage 1 candidate generation -> Stage 2 probe
+  # verification -> Stage 3 guided bad-case analysis -> Stage 4 confidence
+  # fusion -> Stage 5 priority scoring -> Stage 6 suggestion write-up.
+  intelligent: false
+  min_items_per_capability: 8  # item-level screening statistical guard
+  min_peers: 5                 # minimum historical peers for percentile judgment
+  min_passk_samples: 8         # minimum samples before pass@k gap is trusted
+  passk_gap_threshold: 0.5     # (pass_k - pass_1)/pass_1 to call "unstable trigger"
+  pass1_high_threshold: 0.5    # pass@1 below this + gap above => rejection sampling
+  saturation_window: 20        # stop bad-case sampling after N new-less cases
+  probe_registry_path: null    # null => packaged probe registry
+  cost_table_path: null        # null => packaged Stage-5 cost table
+
 recommendation:
   retrieval_enabled: false     # external paper/report RAG (off by default)
   max_external_sources: 5

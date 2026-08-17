@@ -1,0 +1,19 @@
+# Initial relative Cost table by suggestion_type (design doc v2 section 7).
+#
+# Cost is a RELATIVE effort estimate (1 = cheapest: sampling + filtering on
+# existing infra). The `feedback` module recalibrates these from real
+# execution_logs: effective_cost = base * mean(actual_cost / predicted_cost),
+# clamped to [0.5, 3.0]. Edits here are seed values only; the calibrated table
+# lives in the versioned `calibration` DB asset.
+
+version: 1
+
+costs:
+  rejection_sampling: 1.0        # 现有 infra：采样 + 过滤，无需新数据
+  data_reweighting: 1.5          # 数据已存在，调整配比 + 观察联动
+  targeted_synthesis: 4.0        # 合成 pipeline + 人工抽检
+  compositional_curriculum: 6.0  # 新环境 / 组合数据，工作量最大
+  non_training_fix: 0.5          # prompt 模板 / 解析器 / reward shaping
+  eval_infra_fix: 0.5            # 评测脚本 / 抽取逻辑修复
+  build_probe_first: 1.0         # 构造 probe 集（诊断投入，非训练）
+  human_review: 0.5              # 人工复核成本

@@ -71,6 +71,24 @@ and only writing the parts that are unique to this project.
   `groundedness_check.py` post-processor verifies every cited rule id and number exists in
   the evidence set (section 6.4).
 
+## 8. Intelligent diagnosis — stages 1-7 (design doc v2)
+
+- `intelligent_diagnosis/` implements the v2 pipeline (see
+  `docs/intelligent-diagnosis-v2-design.md`): candidate generation →
+  probe verification → guided bad-case analysis → confidence fusion →
+  priority scoring → suggestion write-up → feedback loop.
+- **Reuses** the Stage-0 assets (`curves`/`coverage`/`portfolio`), `judge()`
+  below-expectation logic, and the historical item-level scores from the DB;
+  item-level capability tags (`item_capabilities`) come from the benchmark
+  tagger and degrade to benchmark-level (coarse) evidence when absent.
+- **Statistical guards**: minimum item/peer counts, Wilson intervals for
+  small-sample sub-accuracy, rank-based percentiles, unbiased pass@k
+  (Chen et al.), saturation-stopped bad-case sampling.
+- **Feedback loop** (`feedback.py`): `execution_logs` table + versioned
+  `calibration` asset; `recalibrate()` re-estimates the Stage-5 cost ratios
+  and gain scale from real outcomes (DataChef-style "use last round's effect
+  to fix next round's estimate", applied at the human fix loop level).
+
 ## Directory map (design doc section 7)
 
 ```
@@ -82,6 +100,9 @@ src/benchmark_diagnosis/
 ├── evaluation_orchestration/  # harness_bridge, deploy, screening_runner, expectation_curves, drilldown_trigger
 ├── diagnosis/       # label_slicing, failure_mode_analyst
 ├── recommendation/  # rule_base, retrieval, synthesizer, groundedness_check
+├── intelligent_diagnosis/  # stages 1-7: candidate_generation, probe_registry,
+│                           # guided_case_analyzer, confidence_fusion,
+│                           # priority_scorer, suggestion_writer, feedback, orchestrator
 └── reporting/       # report_generator
 ```
 

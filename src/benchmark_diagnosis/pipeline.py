@@ -172,6 +172,9 @@ def _judge_cluster(
                 "weight": b["weight"],
                 "score": raw_scores.get(bid),
                 "residual": j.get("residual"),
+                "percentile": j.get("percentile"),
+                "z_score": j.get("z_score"),
+                "underperforming": j.get("underperforming", False),
             }
         )
 
@@ -229,6 +232,7 @@ def diagnose_model(
     cases: list[dict] | None = None,
     mode: str = "full",
     advisor_mode: str = "auto",
+    intelligent: bool = False,
 ) -> dict[str, Any]:
     """Run the online diagnosis/recommendation chain and return a report dict.
 
@@ -243,6 +247,9 @@ def diagnose_model(
             (analysis only; recommendations are omitted).
         advisor_mode: Requested advisor mode (``auto``/``llm_rules``/``rules``),
             resolved against ``config`` via :func:`resolve_advisor_mode`.
+        intelligent: When True, also run the stages 1-7 intelligent diagnosis
+            pipeline (design doc v2) and attach ``intelligent_diagnosis`` to
+            the report.
 
     Returns:
         A structured report dict suitable for ``reporting.render_markdown``.
@@ -332,7 +339,7 @@ def diagnose_model(
             }
         )
 
-    return {
+    report: dict[str, Any] = {
         "model": {
             "model_id": model.model_id,
             "name": model.name,
@@ -352,6 +359,48 @@ def diagnose_model(
         },
         "clusters": clusters,
     }
+
+    if intelligent:
+        report["intelligent_diagnosis"] = _run_intelligent_block(
+            session, model, raw_scores, config, llm=llm, cases=cases, mode=mode
+        )
+    return report
+
+
+def _run_intelligent_block(
+    session: Session,
+    model: ModelRecord,
+    raw_scores: dict[str, float],
+    config: Settings,
+    *,
+    llm: LLMClient | None,
+    cases: list[dict] | None,
+    mode: str,
+) -> dict[str, Any]:
+    """Run stages 1-7 on every below-expectation benchmark verdict."""
+    from benchmark_diagnosis.intelligent_diagnosis.orchestrator import (
+        run_intelligent_diagnosis,
+    )
+
+    portfolios = _revive_portfolios(db.load_latest_asset(session, "portfolio") or [])
+    curves = _revive_curves(db.load_latest_asset(session, "curves") or [])
+    verdicts: dict[str, dict] = {}
+    for pf in portfolios:
+        for b in pf.benchmarks:
+            bid = b["benchmark_id"]
+            if bid not in raw_scores or bid in verdicts:
+                continue
+            verdicts[bid] = judge(model, bid, raw_scores[bid], curves, config.curves)
+    return run_intelligent_diagnosis(
+        session=session,
+        verdict_benchmarks=list(verdicts.values()),
+        model=model,
+        raw_scores=raw_scores,
+        config=config,
+        llm=llm,
+        cases=cases,
+        mode=mode,
+    )
 
 
 def _rec_tags(

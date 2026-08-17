@@ -1,0 +1,173 @@
+# Hierarchical capability taxonomy (design doc v2 section 2).
+#
+# The shared vocabulary across all intelligent-diagnosis stages. Node ids are
+# stable: do not rename, only add (bump `version` when you do). Legacy flat
+# capability tags from the coverage asset (e.g. "math", "world_knowledge",
+# "agentic_tool_use") resolve through `aliases`, so coarse-mode evidence from
+# benchmark-level tags maps into this hierarchy automatically.
+
+version: 1
+
+capabilities:
+  # ------------------------------------------------------------- level 1 roots
+  - id: knowledge
+    name: 知识
+    description: 事实性 / 常识性知识储备
+
+  - id: reasoning
+    name: 推理
+    description: 多步推理、逻辑演绎、数学推理
+
+  - id: language
+    name: 语言理解与生成
+    description: 阅读理解、多语言、生成质量
+
+  - id: instruction_following
+    name: 指令遵循
+    description: 按指令与约束完成输出
+
+  - id: long_context
+    name: 长上下文
+    description: 长文本利用（检索 / 多跳 / 摘要）
+
+  - id: code
+    name: 代码
+    description: 代码生成 / 修复 / 执行推理
+
+  - id: agent
+    name: Agent 与工具使用
+    description: 工具调用、任务规划、环境交互
+
+  - id: safety
+    name: 安全与对齐
+    description: 拒答、越狱抵抗、价值观对齐
+
+  - id: multimodal
+    name: 多模态
+    description: 视觉等多模态输入理解
+
+  # ------------------------------------------------------------------ knowledge
+  - id: knowledge.world
+    name: 世界知识
+    parent: knowledge
+    aliases: [world_knowledge]
+    description: 跨领域的事实性知识
+
+  - id: knowledge.commonsense
+    name: 常识知识
+    parent: knowledge
+    aliases: [commonsense_knowledge]
+    description: 物理 / 社会常识
+
+  - id: knowledge.factual
+    name: 事实性与幻觉抑制
+    parent: knowledge
+    aliases: [factuality]
+    description: 不确定时拒答 / 引用溯源 / 反幻觉
+
+  # ------------------------------------------------------------------ reasoning
+  - id: reasoning.math
+    name: 数学推理
+    parent: reasoning
+    aliases: [math]
+    description: 数学问题求解
+
+  - id: reasoning.math.multi_step
+    name: 多步数学推理
+    parent: reasoning.math
+    description: 需要多步推导的竞赛级 / 高难度数学
+
+  - id: reasoning.math.calculation
+    name: 数值与符号计算
+    parent: reasoning.math
+    description: 四则运算、符号化简、精确计算
+
+  - id: reasoning.math.word_problem
+    name: 应用题建模
+    parent: reasoning.math
+    description: 将自然语言应用题转化为数学表达式
+
+  - id: reasoning.logical
+    name: 逻辑推理
+    parent: reasoning
+    description: 演绎 / 归纳 / 类比推理
+
+  - id: reasoning.verbal
+    name: 言语推理
+    parent: reasoning
+    description: 文字类推理（非数学）
+
+  # -------------------------------------------------------------------- language
+  - id: language.reading
+    name: 阅读理解
+    parent: language
+    aliases: [reading_comprehension]
+    description: 从文本中定位与整合信息
+
+  - id: language.multilingual
+    name: 多语言
+    parent: language
+    aliases: [multilingual]
+    description: 非英语语种的理解与生成
+
+  # ------------------------------------------------------- instruction following
+  - id: instruction_following.format
+    name: 格式遵循
+    parent: instruction_following
+    description: JSON / 代码块 / 选项等格式约束
+
+  - id: instruction_following.multi_constraint
+    name: 多约束遵循
+    parent: instruction_following
+    description: 同时满足多条指令约束
+
+  # ---------------------------------------------------------------- long context
+  - id: long_context.retrieval
+    name: 长文信息检索
+    parent: long_context
+    description: 在长文中定位具体信息
+
+  - id: long_context.multi_hop
+    name: 长文多跳推理
+    parent: long_context
+    description: 综合长文中多处信息得出结论
+
+  # ------------------------------------------------------------------------- code
+  - id: code.generation
+    name: 代码生成
+    parent: code
+    description: 按自然语言 / 签名生成正确代码
+
+  - id: code.repair
+    name: 代码修复
+    parent: code
+    description: 定位并修复真实仓库缺陷
+
+  - id: code.execution_reasoning
+    name: 执行与调试推理
+    parent: code
+    description: 根据执行反馈迭代修改
+
+  # ------------------------------------------------------------------------ agent
+  - id: agent.tool_call
+    name: 工具调用
+    parent: agent
+    aliases: [agentic_tool_use]
+    description: 正确选择与调用工具 / API
+
+  - id: agent.tool_call.format
+    name: 工具调用格式
+    parent: agent.tool_call
+    description: 函数调用参数格式合规
+
+  - id: agent.tool_call.planning
+    name: 工具调用规划
+    parent: agent.tool_call
+    description: 多步任务拆解与工具编排
+
+  # ------------------------------------------------------------------- multimodal
+  - id: multimodal.vision
+    name: 视觉理解
+    parent: multimodal
+    aliases: [vision]
+    description: 图像输入的理解与推理

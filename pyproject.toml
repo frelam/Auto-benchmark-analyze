@@ -60,6 +60,7 @@ benchmark_diagnosis = [
     "recommendation/rule_base/*.yaml",
     "recommendation/experience_base/*.yaml",
     "data/seed/*.json",
+    "intelligent_diagnosis/data/*.yaml",
 ]
 
 [tool.pytest.ini_options]

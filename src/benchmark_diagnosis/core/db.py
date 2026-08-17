@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from benchmark_diagnosis.core.schema import Asset, Base
 
-ASSET_TYPES = ("coverage", "portfolio", "curves", "experience")
+ASSET_TYPES = ("coverage", "portfolio", "curves", "experience", "calibration")
 
 
 def make_engine(db_path: str | Path) -> Engine:

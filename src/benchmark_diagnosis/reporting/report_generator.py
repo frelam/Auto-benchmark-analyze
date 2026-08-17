@@ -129,6 +129,11 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append("---")
         lines.append("")
 
+    intelligent = report.get("intelligent_diagnosis")
+    if intelligent:
+        lines.append(render_intelligent_diagnosis(intelligent))
+        lines.append("")
+
     figures = report.get("figures") or []
     if figures:
         lines.append("## Figures")
@@ -161,6 +166,92 @@ def _fmt(value: Any, digits: int = 3) -> str:
     if isinstance(value, float):
         return f"{value:.{digits}f}"
     return str(value)
+
+
+def render_intelligent_diagnosis(block: dict[str, Any]) -> str:
+    """Render the stages 1-7 intelligent diagnosis block as Markdown."""
+    lines: list[str] = []
+    lines.append("## 智能诊断（Stages 1-7）")
+    lines.append("")
+    lines.append(
+        f"- taxonomy v{block.get('taxonomy_version', '?')} · probe registry "
+        f"v{block.get('probe_registry_version', '?')} · 校准 logs="
+        f"{(block.get('calibration') or {}).get('n_logs', 0)}"
+    )
+    lines.append("")
+
+    candidates = block.get("candidates") or []
+    if not candidates:
+        lines.append("_未发现低于预期的候选能力。_")
+        lines.append("")
+        return "\n".join(lines)
+
+    lines.append("### 候选能力与复测")
+    lines.append("")
+    lines.append("| capability | screening | mode | probe 状态 | confidence | suggestion_type |")
+    lines.append("|---|---|---|---|---|---|")
+    verdicts = {v["capability_id"]: v for v in (block.get("verdicts") or [])}
+    probes = {p["capability_id"]: p for p in (block.get("probe_results") or [])}
+    for cand in candidates:
+        cap = cand["capability_id"]
+        verdict = verdicts.get(cap, {})
+        probe = probes.get(cap, {})
+        probe_state = probe.get("state", "—")
+        passk = ""
+        if probe.get("pass_1") is not None and probe.get("pass_k") is not None:
+            passk = f" pass@1={probe['pass_1']:.2f}/pass@k={probe['pass_k']:.2f}"
+        lines.append(
+            f"| `{cap}` | {_fmt(cand.get('screening_score'), 2)} | "
+            f"{cand.get('evidence_mode', '')} | {probe_state}{passk} | "
+            f"{verdict.get('confidence', '—')} | {verdict.get('suggestion_type', '—')} |"
+        )
+    lines.append("")
+
+    lines.append("### 排序后的建议（Priority = Confidence × ExpectedGain / Cost）")
+    lines.append("")
+    suggestions = block.get("suggestions") or {}
+    training = suggestions.get("training") or []
+    if training:
+        lines.append("**训练类建议**（按优先级降序）")
+        lines.append("")
+        for s in training:
+            lines.append(
+                f"- **{s['capability_id']}** [{s['suggestion_type']}] "
+                f"(confidence={s['confidence']}, priority={_fmt(s['priority_score'], 3)}, "
+                f"gain={_fmt(s['expected_gain'], 3)})"
+            )
+            lines.append(f"  - {s['concrete_action']}")
+            for ev in s.get("supporting_evidence") or []:
+                lines.append(f"  - *evidence*: {ev}")
+        lines.append("")
+    for group, title in (
+        ("non_training", "**非训练类（工程侧路由）**"),
+        ("build_probe_first", "**先建 Probe（不直接给训练建议）**"),
+        ("human_review", "**转人工复核**"),
+    ):
+        items = suggestions.get(group) or []
+        if not items:
+            continue
+        lines.append(title)
+        lines.append("")
+        for s in items:
+            lines.append(
+                f"- **{s['capability_id']}** [{s['suggestion_type']}] — {s['concrete_action']}"
+            )
+        lines.append("")
+
+    probe_todo = block.get("probe_todo") or {}
+    build = probe_todo.get("build_probe_set") or []
+    pending = probe_todo.get("pending_eval") or []
+    if build or pending:
+        lines.append("### Probe 待办")
+        lines.append("")
+        if build:
+            lines.append(f"- 待建设 probe 集：{', '.join(f'`{c}`' for c in build)}")
+        if pending:
+            lines.append(f"- 待评测 probe：{', '.join(f'`{c}`' for c in pending)}")
+        lines.append("")
+    return "\n".join(lines)
 
 
 def cluster_capability_labels(coverage: list[dict[str, Any]]) -> dict[str, list[str]]:

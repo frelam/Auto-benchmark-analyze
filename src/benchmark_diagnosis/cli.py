@@ -290,6 +290,10 @@ def run(
     output: Path = typer.Option(
         None, "--output", help="Report output path (default: config run.output.dir/report.md).",
     ),
+    intelligent: bool = typer.Option(
+        None, "--intelligent/--no-intelligent",
+        help="Run the stages 1-7 intelligent diagnosis pipeline (design doc v2).",
+    ),
 ) -> None:
     """One command: deploy or reuse an endpoint, evaluate, analyze, advise.
 
@@ -311,6 +315,7 @@ def run(
         params=params,
         release_date=release_date,
         output=output,
+        intelligent=intelligent,
     )
     _print_result(result)
 
@@ -339,6 +344,10 @@ def diagnose(
     output: Path = typer.Option(
         None, "--output", help="Report output path (default: config run.output.dir/report.md).",
     ),
+    intelligent: bool = typer.Option(
+        None, "--intelligent/--no-intelligent",
+        help="Run the stages 1-7 intelligent diagnosis pipeline (design doc v2).",
+    ),
 ) -> None:
     """Evaluate (optional) then diagnose and write a report + metrics + figures.
 
@@ -357,8 +366,100 @@ def diagnose(
         params=params,
         release_date=release_date,
         output=output,
+        intelligent=intelligent,
     )
     _print_result(result)
+
+
+feedback_app = typer.Typer(
+    help="Stage 7 feedback loop: log executed suggestions and recalibrate cost/gain estimates.",
+)
+app.add_typer(feedback_app, name="feedback")
+
+
+@feedback_app.command("log")
+def feedback_log(
+    ctx: typer.Context,
+    capability: str = typer.Argument(..., help="Capability id the suggestion targeted."),
+    suggestion_type: str = typer.Argument(..., help="rejection_sampling | targeted_synthesis | ..."),
+    predicted_gain: float = typer.Option(..., "--predicted-gain", help="ExpectedGain predicted by Stage 5."),
+    actual_gain: float = typer.Option(..., "--actual-gain", help="Measured gain after execution."),
+    predicted_cost: float = typer.Option(..., "--predicted-cost", help="Cost predicted by Stage 5."),
+    actual_cost: float = typer.Option(..., "--actual-cost", help="Real effort spent."),
+    note: str = typer.Option(None, "--note", help="Free-form note."),
+) -> None:
+    """Record one executed suggestion's real outcome (feeds recalibration)."""
+    from benchmark_diagnosis.intelligent_diagnosis.feedback import log_execution
+
+    settings: Settings = ctx.obj
+    session, _ = _session(settings)
+    try:
+        row_id = log_execution(
+            session,
+            capability_id=capability,
+            suggestion_type=suggestion_type,
+            predicted_gain=predicted_gain,
+            actual_gain=actual_gain,
+            predicted_cost=predicted_cost,
+            actual_cost=actual_cost,
+            note=note,
+        )
+        console.print(f"[green]Logged execution #{row_id}.[/]")
+    finally:
+        session.close()
+
+
+@feedback_app.command("list")
+def feedback_list(
+    ctx: typer.Context,
+    suggestion_type: str = typer.Option(None, "--suggestion-type"),
+    limit: int = typer.Option(100, "--limit"),
+) -> None:
+    """List recent execution logs."""
+    from benchmark_diagnosis.intelligent_diagnosis.feedback import list_executions
+
+    settings: Settings = ctx.obj
+    session, _ = _session(settings)
+    try:
+        rows = list_executions(session, suggestion_type=suggestion_type, limit=limit)
+    finally:
+        session.close()
+    if not rows:
+        console.print("[dim]No execution logs yet.[/]")
+        return
+    table = Table(title="Execution logs")
+    for col in ("id", "capability", "type", "pred_gain", "act_gain", "pred_cost", "act_cost", "created"):
+        table.add_column(col)
+    for row in rows:
+        table.add_row(
+            str(row["id"]), row["capability_id"], row["suggestion_type"],
+            f"{row['predicted_gain']:.3f}", f"{row['actual_gain']:.3f}",
+            f"{row['predicted_cost']:.3f}", f"{row['actual_cost']:.3f}",
+            row["created_at"],
+        )
+    console.print(table)
+
+
+@feedback_app.command("recalibrate")
+def feedback_recalibrate(
+    ctx: typer.Context,
+    smoothing: float = typer.Option(0.5, "--smoothing", help="Weight of measured vs prior (0..1)."),
+) -> None:
+    """Re-estimate Stage 5 cost ratios + gain scale from the execution log."""
+    from benchmark_diagnosis.intelligent_diagnosis.feedback import recalibrate
+
+    settings: Settings = ctx.obj
+    session, _ = _session(settings)
+    try:
+        cal = recalibrate(session, smoothing=smoothing)
+    finally:
+        session.close()
+    console.print(
+        f"[green]Recalibrated from {cal.n_logs} execution log(s):[/] "
+        f"gain_scale={cal.gain_scale}"
+    )
+    for stype, ratio in sorted(cal.costs.items()):
+        console.print(f"  {stype}: cost ratio {ratio:.2f}")
 
 
 def _print_scores(scores: dict[str, float]) -> None:

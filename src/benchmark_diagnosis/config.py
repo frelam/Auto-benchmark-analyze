@@ -58,6 +58,16 @@ class CurvesConfig(BaseModel):
 class DiagnosisConfig(BaseModel):
     sample_size: int = 50
     taxonomy_path: str | None = None
+    # Intelligent diagnosis pipeline (design doc v2) thresholds.
+    intelligent: bool = False
+    min_items_per_capability: int = 8
+    min_peers: int = 5
+    min_passk_samples: int = 8
+    passk_gap_threshold: float = 0.5
+    pass1_high_threshold: float = 0.5
+    saturation_window: int = 20
+    probe_registry_path: str | None = None
+    cost_table_path: str | None = None
 
 
 class RecommendationConfig(BaseModel):

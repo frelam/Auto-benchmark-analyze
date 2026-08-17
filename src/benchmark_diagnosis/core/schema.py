@@ -95,3 +95,26 @@ class Asset(Base):
     )
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     payload: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
+
+
+class ExecutionLogRecord(Base):
+    """Stage 7: one executed suggestion and its real outcome (feedback loop).
+
+    Rows feed :func:`benchmark_diagnosis.intelligent_diagnosis.feedback.recalibrate`,
+    which re-estimates the Stage 5 Cost table and gain scaling from measured
+    ``actual_*`` vs ``predicted_*`` values (design doc v2 section 9).
+    """
+
+    __tablename__ = "execution_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    capability_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    suggestion_type: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    predicted_gain: Mapped[float] = mapped_column(Float, nullable=False)
+    actual_gain: Mapped[float] = mapped_column(Float, nullable=False)
+    predicted_cost: Mapped[float] = mapped_column(Float, nullable=False)
+    actual_cost: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime, default=dt.datetime.utcnow, nullable=False
+    )
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)

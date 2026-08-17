@@ -1,0 +1,74 @@
+# Probe Benchmark Registry (design doc v2 section 4).
+#
+# capability_id -> list of narrow, clean probe benchmarks that isolate this one
+# capability (CheckList-style Minimum Functionality Tests). Benchmarks here are
+# drawn from the repository's benchmark registry; probe scores are judged the
+# same way as Stage 0 (peer percentile among historical models).
+#
+# A capability with an empty list has NO registered probe: its diagnosis is
+# capped at Medium confidence and it is emitted to the "build probe" todo list.
+# Prefer 1-2 probes per capability; every entry is a promise that a low score
+# on it means the capability itself is missing (not a confound).
+
+probes:
+  knowledge.world:
+    - benchmark_id: mmlu
+      note: 广度知识，含学科子集
+  knowledge.commonsense:
+    - benchmark_id: hellaswag
+      note: 常识场景续写
+  knowledge.factual:
+    - benchmark_id: simpleqa
+      note: 事实性 / 幻觉抑制窄口径
+  reasoning.math.multi_step:
+    - benchmark_id: aime24
+      note: 竞赛级多步推理
+    - benchmark_id: math
+      note: 竞赛数学全集
+  reasoning.math.calculation:
+    - benchmark_id: gsm8k
+      note: 数值计算与一步建模
+  reasoning.math.word_problem:
+    - benchmark_id: gsm8k
+      note: 应用题建模
+  reasoning.logical:
+    - benchmark_id: arc_challenge
+      note: 科学常识推理
+  language.reading:
+    - benchmark_id: mmlu
+      note: 文本理解子集
+  instruction_following:
+    - benchmark_id: ifeval
+      note: 指令遵循窄口径
+  instruction_following.format:
+    - benchmark_id: ifeval
+      note: 格式约束子集
+  long_context:
+    - benchmark_id: longbench_v2
+      note: 长文利用窄口径
+  long_context.retrieval:
+    - benchmark_id: longbench_v2
+      note: 长文检索子集
+  code.generation:
+    - benchmark_id: humaneval
+      note: 单函数生成
+  code.repair:
+    - benchmark_id: swe_bench
+      note: 真实仓库缺陷修复
+  code.execution_reasoning:
+    - benchmark_id: bigcodebench
+      note: 生成+执行验证
+  agent.tool_call:
+    - benchmark_id: tau2_bench
+      note: 工具调用窄口径
+  agent.tool_call.format:
+    - benchmark_id: tau2_bench
+      note: 调用格式子集
+  multimodal.vision:
+    - benchmark_id: mmmlu
+      note: 视觉问答窄口径
+
+  # No probe registered (deliberately omitted, emitted as NO_PROBE):
+  #   reasoning.verbal, instruction_following.multi_constraint,
+  #   long_context.multi_hop, agent.tool_call.planning, safety,
+  #   language.multilingual, knowledge.* ancestors (roll-up only)
