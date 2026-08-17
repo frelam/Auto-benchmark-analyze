@@ -1,0 +1,59 @@
+tests/test_pipeline.py
+  s_ae9f605e1c6deb::t_7b56c1c59226c6 58,77-80
+src/benchmark_diagnosis/config.py
+  s_ae9f605e1c6deb::t_afa5b58092e72c 61-63
+  s_ae9f605e1c6deb::t_8d4820df1860ee 219-224,236-244
+README.md
+  s_ae9f605e1c6deb::t_ef228ce6bd20fc 11
+  s_ae9f605e1c6deb::t_13baa0ce4759e6 67,69,72,75,78
+  s_ae9f605e1c6deb::t_02a1236d0b22dd 79
+docs/intelligent-diagnosis-v2-design.md
+  s_ae9f605e1c6deb::t_b3f0507cad1de8 206-211
+tests/test_intelligent_diagnosis.py
+  s_ae9f605e1c6deb::t_d450502abd9543 999,1018,1020
+src/benchmark_diagnosis/reporting/report_generator.py
+  s_ae9f605e1c6deb::t_edf6ad9dab1db6 65-68,73-75
+  s_ae9f605e1c6deb::t_fdaa403808af2e 112-113,115
+src/benchmark_diagnosis/pipeline.py
+  s_ae9f605e1c6deb::t_0f251d58cb8e3e 24
+  s_ae9f605e1c6deb::t_89ff5cab6d49c2 225-231,238-241,244,247-250,266,268,273-278,288-289,294-310,329
+tests/test_runner.py
+  s_ae9f605e1c6deb::t_bc2727c07054a4 1
+  s_ae9f605e1c6deb::t_7e6ce5d9705e51 120-122
+config/default.yaml
+  s_ae9f605e1c6deb::t_1c840faf022b3b 45-50
+src/benchmark_diagnosis/cli.py
+  s_ae9f605e1c6deb::t_4c0461d543410e 283,295,300-301
+  s_ae9f605e1c6deb::t_a514a2df8b8088 4-8
+src/benchmark_diagnosis/runner.py
+  s_ae9f605e1c6deb::t_f47d1d16f90aee 3-4,15-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "a91728fb7547253b3cbfff718360f583d60b899f",
+  "prompts": {},
+  "sessions": {
+    "s_ae9f605e1c6deb": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a82d79f7760e511ad8d2e8c",
+        "model": "glm-5.2"
+      },
+      "human_author": "lvhaoyu <lvhaoyu@huawei.com>",
+      "custom_attributes": {
+        "tool_id": "icube:applyChatSnapshotPatch",
+        "tool_use_id": "6a82dec77760e511ad8d2fbc",
+        "operation_id": "6a82dec77760e511ad8d2fbc",
+        "edit_kind": "file_edit",
+        "runtime_client": "trae-tob-git-ai",
+        "dedupe_key": "6a82d79f7760e511ad8d2e8c:6a82dec77760e511ad8d2fbc:afterEdit:6c032d96",
+        "source_scene": "agent",
+        "external_session_id": "6a82d79f7760e511ad8d2e8c",
+        "client_type": "ide",
+        "session_id": "6a82d79f7760e511ad8d2e8c",
+        "tool_type": "builtin"
+      }
+    }
+  }
+}
