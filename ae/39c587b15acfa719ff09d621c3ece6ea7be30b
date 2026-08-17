@@ -1,0 +1,57 @@
+examples/run-endpoint.yaml
+  s_ab61a252a1ce98::t_84f60a3f84fb54 7-9
+src/benchmark_diagnosis/runner.py
+  s_ab61a252a1ce98::t_30d10c2fa20a09 31
+  s_ab61a252a1ce98::t_7c472f4af7e0b3 365-367,369
+  s_ab61a252a1ce98::t_0085d58544ed26 119-124
+  s_ab61a252a1ce98::t_c826473840b3e8 219-221
+  s_ab61a252a1ce98::t_b777289bd2c6aa 453-494
+  s_ab61a252a1ce98::t_fdafa1ae264ced 318-346
+examples/run-from-scores.yaml
+  s_ab61a252a1ce98::t_3934154ea5b2eb 6-9
+tests/test_runner.py
+  s_ab61a252a1ce98::t_f51f322e4b102f 150-151,153
+  s_ab61a252a1ce98::t_acdcae9bf8de61 386-591
+  s_ab61a252a1ce98::t_843d859ec17a76 15,17
+  s_ab61a252a1ce98::t_6e96d666d5271b 147-149,152
+README.md
+  s_ab61a252a1ce98::t_4762ffba6c3609 67,70-71,79,86,94,97-98
+  s_ab61a252a1ce98::t_f9a5ca1358b241 54
+  s_ab61a252a1ce98::t_e2446ccc2ebd51 152,155
+src/benchmark_diagnosis/cli.py
+  s_ab61a252a1ce98::t_9c12982e5965e0 326-330
+  s_ab61a252a1ce98::t_2398ebbb7625e1 279-282
+examples/scores.json
+  s_ab61a252a1ce98::t_e548a443dbe7a5 2
+examples/README.md
+  s_ab61a252a1ce98::t_d1ff5943c139d7 20-22,25,43-46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "ae39c587b15acfa719ff09d621c3ece6ea7be30b",
+  "prompts": {},
+  "sessions": {
+    "s_ab61a252a1ce98": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a8301243286b8e10f3d33ff",
+        "model": "glm-5.2"
+      },
+      "human_author": "lvhaoyu <lvhaoyu@huawei.com>",
+      "custom_attributes": {
+        "source_scene": "agent",
+        "client_type": "ide",
+        "runtime_client": "trae-tob-git-ai",
+        "tool_use_id": "6a83068c3286b8e10f3d35a6",
+        "tool_id": "icube:applyChatSnapshotPatch",
+        "tool_type": "builtin",
+        "operation_id": "6a83068c3286b8e10f3d35a6",
+        "session_id": "6a8301243286b8e10f3d33ff",
+        "dedupe_key": "6a8301243286b8e10f3d33ff:6a83068c3286b8e10f3d35a6:afterEdit:70dea344",
+        "edit_kind": "file_edit",
+        "external_session_id": "6a8301243286b8e10f3d33ff"
+      }
+    }
+  }
+}
