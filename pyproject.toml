@@ -58,6 +58,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 benchmark_diagnosis = [
     "recommendation/rule_base/*.yaml",
+    "recommendation/experience_base/*.yaml",
     "data/seed/*.json",
 ]
 

@@ -64,6 +64,8 @@ class RecommendationConfig(BaseModel):
     retrieval_enabled: bool = False
     max_external_sources: int = 5
     advisor_mode: Literal["auto", "llm_rules", "rules"] = "auto"
+    max_actions: int = 3
+    experience_path: str | None = None
 
 
 class RunModelConfig(BaseModel):
@@ -165,10 +167,15 @@ def resolve_advisor_mode(config: Settings, requested: str | None = None) -> str:
     ``requested`` (or ``config.recommendation.advisor_mode``) is one of
     ``auto`` / ``llm_rules`` / ``rules``:
 
-    * ``rules`` — always the rule-based advisor (a configured LLM is ignored and
-      failure-mode classification is skipped).
-    * ``llm_rules`` — requires ``config.llm.model``; raises ``ValueError`` if no
-      analyst LLM is configured so misconfiguration fails before evaluation.
+    * ``rules`` — deterministic recommendation engine only: score the
+      tool-maintained experience-base interventions against the diagnosed
+      capability deficit and emit concrete datasets / hyperparameters / reason
+      chain (a configured LLM is ignored and failure-mode classification is
+      skipped).
+    * ``llm_rules`` — the engine's Stage 2: the analyst LLM re-ranks the
+      experience-base candidates (grounded, never free generation). Requires
+      ``config.llm.model``; raises ``ValueError`` if no analyst LLM is
+      configured so misconfiguration fails before evaluation.
     * ``auto`` — ``llm_rules`` when an analyst LLM is configured, else ``rules``.
 
     Returns the resolved mode (``"llm_rules"`` or ``"rules"``).

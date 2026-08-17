@@ -1,0 +1,472 @@
+# Tool-maintained experience base — the recommendation engine's data core.
+#
+# THIS IS TOOL-MAINTAINED DATA. In normal use you never edit it: the packaged
+# seed below initializes the base, and the tool persists it as a versioned
+# "experience" DB asset that record_outcome() extends with measured deltas over
+# time. The recommendation engine reads datasets / hyperparameters / expected
+# effects / outcomes from here to turn a diagnosed capability deficit into
+# executable suggestions.
+#
+# Fields:
+#   applicable_tags : capability and/or failure-mode ids from taxonomy.yaml.
+#   category        : one of training_levers in taxonomy.yaml.
+#   linked_rule_id  : optional rule in rules.yaml this intervention derives from.
+#   source_type     : human_expert | rule_base | paper | outcome_measured.
+#   evidence_strength: high | medium | low.
+#   outcomes        : appended by record_outcome(); seed may carry known results.
+
+version: 1
+
+# How bad-case evidence (failure modes) reinforces capability-deficit estimates.
+failure_mode_capability_map:
+  reasoning_error: [reasoning, math]
+  calculation_error: [math]
+  hallucination: [factuality]
+  context_ignoring: [long_context, reading_comprehension]
+  tool_use_error: [agentic_tool_use, code]
+  format_violation: [instruction_following]
+  over_refusal: [safety]
+  knowledge_gap: [world_knowledge, commonsense_knowledge]
+  premature_termination: [instruction_following, long_context]
+  length_inefficiency: [instruction_following]
+  instruction_misunderstanding: [instruction_following]
+
+interventions:
+  # ------------------------------------------------------------------ 长文本
+  - intervention_id: EXP-longctx-001
+    title: 长上下文能力：长文档语料 + 位置编码外推
+    applicable_tags: [long_context, reading_comprehension, context_ignoring]
+    category: algorithm
+    linked_rule_id: R-longctx-001
+    expected_effect: LongBench V2 / 长文档 benchmark 提升 10~25 分位
+    evidence_strength: high
+    source_type: human_expert
+    datasets:
+      - name: LongBench 训练版 / L-Eval 长文 QA
+        rationale: 覆盖 16 类长文本任务，可拆分为指令微调样本，直接对齐评测分布
+        expected_effect: 提升长文档信息定位与多跳抽取
+        source: huggingface:THUDM/LongBench
+      - name: 书级长文档语料（BookSum 类 / 自建 32k-128k 文档）
+        rationale: 长上下文继续预训练需要连贯长文档，而非拼接的短文本
+        expected_effect: 让模型在真实长文中学会利用远处依赖
+        source: human_expert
+    hyperparameters:
+      - knob: rope_scaling / max_position_embeddings
+        direction: extend
+        typical_range: "4k -> 32k-128k（linear 或 YaRN 外推）"
+        rationale: 直接外推可复用预训练权重；YaRN 适合超长输入
+      - knob: long-context continued-pretraining tokens
+        direction: increase
+        typical_range: "50B~200B tokens"
+        rationale: 仅位置外推不足以激活长文能力，需长文继续预训练
+    outcomes:
+      - delta: 0.021
+        note: 8B 模型长文 CPT + RoPE 外推后 LongBench V2 约 +2pt
+        run_id: seed-known-1
+
+  # ------------------------------------------------------------------ 阅读理解
+  - intervention_id: EXP-reading-001
+    title: 阅读理解：多跳抽取与摘要样本增强
+    applicable_tags: [reading_comprehension]
+    category: data_mix
+    linked_rule_id: R-reading-001
+    expected_effect: 阅读理解类 benchmark 提升 5~15 分位
+    evidence_strength: medium
+    source_type: human_expert
+    datasets:
+      - name: SQuAD 2.0 / RACE
+        rationale: 基础抽取式与选择式阅读理解，覆盖拒答（无答案）场景
+        expected_effect: 提升定位式理解与拒答能力
+        source: huggingface:rajpurkar/squad_v2
+      - name: HotpotQA
+        rationale: 多跳推理式阅读理解，训练跨段落信息融合
+        expected_effect: 提升多跳抽取与证据融合
+        source: huggingface:hotpotqa/hotpot_qa
+    hyperparameters:
+      - knob: 长文/抽取类样本在 SFT 中的配比
+        direction: increase
+        typical_range: "提升至总 SFT 的 5%~15%"
+        rationale: 低配比时模型对长文档与多跳问题泛化不足
+
+  # ------------------------------------------------------------------ 事实性
+  - intervention_id: EXP-factuality-001
+    title: 事实性：证据链语料 + 不确定即声明不确定
+    applicable_tags: [factuality, hallucination]
+    category: data_mix
+    linked_rule_id: R-factuality-001
+    expected_effect: SimpleQA / 短问答事实准确率提升 10~20 分位
+    evidence_strength: high
+    source_type: human_expert
+    datasets:
+      - name: SimpleQA / HaluEval
+        rationale: 短问答事实性与幻觉检测样本，训练"有依据才回答"
+        expected_effect: 降低无依据编造
+        source: huggingface:openai/simpleqa
+      - name: TruthfulQA + 引用溯源 SFT 语料
+        rationale: 反事实 + 引用格式样本，配合"不确定即拒答"模板
+        expected_effect: 抑制幻觉、提升引用溯源
+        source: huggingface:truthfulq/truthful_qa
+    hyperparameters:
+      - knob: '"不确定即拒答" SFT 样本配比'
+        direction: increase
+        typical_range: "5%~15%"
+        rationale: 教会模型在依据不足时声明不确定而非强行生成
+      - knob: 幻觉成对 DPO（编造 vs 拒答）
+        direction: enable
+        typical_range: "β ∈ [0.1, 0.3]"
+        rationale: 直接校正拒答边界，降低过度自信生成
+    outcomes:
+      - delta: 0.015
+        note: 事实性 SFT 增强后 SimpleQA 约 +1.5pt
+        run_id: seed-known-2
+
+  # ------------------------------------------------------------------ 数学
+  - intervention_id: EXP-math-001
+    title: 数学推理：CoT 语料 + 过程监督
+    applicable_tags: [math, reasoning, reasoning_error, calculation_error]
+    category: data_mix
+    linked_rule_id: R-math-001
+    expected_effect: MATH / GSM8K 簇级 +1.5%~3%
+    evidence_strength: high
+    source_type: human_expert
+    datasets:
+      - name: GSM8K + MATH（含逐步解答）
+        rationale: 多步算术与竞赛级数学推理基础语料
+        expected_effect: 提升推理链完整度与符号计算
+        source: huggingface:openai/gsm8k
+      - name: PRM800K 过程标注
+        rationale: 逐步骤正确性标签，用于训练过程奖励模型（PRM）
+        expected_effect: 为过程监督提供训练信号
+        source: openai/prm800k
+      - name: OpenWebMath / Proof-Pile-2
+        rationale: 高质量数学预训练语料，补充数学背景知识
+        expected_effect: 增强数学直觉与公式能力
+        source: community
+    hyperparameters:
+      - knob: reward_model
+        direction: prm_over_orm
+        typical_range: "过程监督 PRM 替换结果-only ORM"
+        rationale: 中间步骤错误在结果级 reward 中不可见
+      - knob: 采样温度 / self-consistency 预算
+        direction: increase
+        typical_range: "T ∈ [0.6, 1.0]，投票 5~16 次"
+        rationale: 多步推理可借采样投票摊薄单次路径错误
+    outcomes:
+      - delta: 0.012
+        note: PRM 微调后 MATH 约 +1.2pt
+        run_id: seed-known-3
+
+  # ------------------------------------------------------------------ 代码
+  - intervention_id: EXP-code-001
+    title: 代码能力：可执行验证 + 代码语料增强
+    applicable_tags: [code, tool_use_error]
+    category: data_mix
+    linked_rule_id: R-code-001
+    expected_effect: SWE-bench / LiveCodeBench 提升 10~20 分位
+    evidence_strength: high
+    source_type: human_expert
+    datasets:
+      - name: CodeContests + BigCodeBench
+        rationale: 竞赛级与指令级代码样本，含单测，强调"可运行"
+        expected_effect: 提升代码正确性与边界处理
+        source: huggingface:deepmind/code_contests
+      - name: SWE-bench 轨迹（问题→修复→单测）
+        rationale: 真实仓库级问题解决轨迹，训练定位与修复
+        expected_effect: 提升 agent 式代码修复能力
+        source: huggingface:princeton-nlp/SWE-bench
+    hyperparameters:
+      - knob: 执行通过率 reward（单元测试 / pass@k）
+        direction: enable
+        typical_range: "RL 阶段以 test 通过为 reward"
+        rationale: 强化"可运行"而非"看着对"
+      - knob: 代码语料在预训练中的配比
+        direction: increase
+        typical_range: "提升至 15%~25%"
+        rationale: 代码语料不足导致语法与 API 知识薄弱
+    outcomes:
+      - delta: 0.018
+        note: 单测 reward 强化后 LiveCodeBench 约 +1.8pt
+        run_id: seed-known-4
+
+  # ------------------------------------------------------------------ Agent
+  - intervention_id: EXP-agent-001
+    title: Agent / 工具调用：函数调用轨迹 SFT
+    applicable_tags: [agentic_tool_use, tool_use_error]
+    category: sft_construction
+    linked_rule_id: R-sft-002
+    expected_effect: τ-bench / 工具调用类 benchmark 提升 10~20 分位
+    evidence_strength: medium
+    source_type: human_expert
+    datasets:
+      - name: τ-bench / ToolBench 轨迹
+        rationale: 多轮工具调用轨迹（含错误调用与纠正），训练收到工具返回后正确利用
+        expected_effect: 降低参数错误与信息忽略
+        source: community
+      - name: Gorilla 函数调用样本
+        rationale: API 文档感知的函数调用数据，覆盖常见 API
+        expected_effect: 提升工具选择与参数生成
+        source: huggingface:gorilla-llm/gorilla-apis
+    hyperparameters:
+      - knob: 工具调用格式一致性
+        direction: enforce
+        typical_range: "统一 function-call schema / JSON"
+        rationale: 格式不一致会破坏 agent 循环的解析环节
+      - knob: 任务成功率 RL reward
+        direction: enable
+        typical_range: "以多轮任务是否成功为 reward"
+        rationale: 轨迹级成功信号强于单步格式正确
+
+  # ------------------------------------------------------------------ 指令遵从
+  - intervention_id: EXP-instruction-001
+    title: 指令遵从：多样化指令模板 SFT + 格式 reward
+    applicable_tags: [instruction_following, format_violation, instruction_misunderstanding]
+    category: sft_construction
+    linked_rule_id: R-sft-001
+    expected_effect: IFEval 提升 10~20 分位
+    evidence_strength: high
+    source_type: human_expert
+    datasets:
+      - name: IFEval 风格指令模板语料
+        rationale: 覆盖约束（长度/格式/关键词）的指令样本，对齐评测分布
+        expected_effect: 提升约束遵从
+        source: huggingface:hiyouga/IFEval
+      - name: 多约束指令模板（自定义）
+        rationale: 覆盖真实使用中的表达变体与组合约束
+        expected_effect: 提升指令意图理解
+        source: human_expert
+    hyperparameters:
+      - knob: 格式约束 reward 权重
+        direction: increase
+        typical_range: "格式 reward 占整体 reward 的 10%~30%"
+        rationale: 直接惩罚 JSON / 代码块 / 选项字母不合规
+      - knob: SFT 指令模板多样性
+        direction: increase
+        typical_range: "每意图 >= 10 种模板变体"
+        rationale: 模板单一导致对未见表达的泛化差
+
+  # ------------------------------------------------------------------ 安全
+  - intervention_id: EXP-safety-001
+    title: 安全 / 拒答边界：拒答成对样本 + DPO
+    applicable_tags: [safety, over_refusal]
+    category: reward_design
+    linked_rule_id: R-reward-004
+    expected_effect: 拒答边界校正，over-refusal 下降 30%~50%
+    evidence_strength: medium
+    source_type: human_expert
+    datasets:
+      - name: XSTest 拒答边界样本
+        rationale: 标注"应拒答 vs 可回答"边界，覆盖安全与非安全组合
+        expected_effect: 校正过度安全对齐
+        source: huggingface:paul-rottger/exaggerated-safety
+      - name: 拒答边界成对偏好样本
+        rationale: 同一指令下"拒答"与"正确回答"成对样本
+        expected_effect: 训练模型区分应答与应拒
+        source: human_expert
+    hyperparameters:
+      - knob: DPO β
+        direction: decrease
+        typical_range: "β ∈ [0.05, 0.15]"
+        rationale: 过高的 β 会放大对齐偏差，导致过度拒答
+      - knob: 拒答样本在 SFT 中的配比
+        direction: tune
+        typical_range: "3%~8%"
+        rationale: 配比过高会诱发过度拒答
+
+  # ------------------------------------------------------------------ 多语言
+  - intervention_id: EXP-multilingual-001
+    title: 多语言：跨语言语料增强
+    applicable_tags: [multilingual]
+    category: data_mix
+    expected_effect: 多语言 benchmark 提升 5~15 分位
+    evidence_strength: medium
+    source_type: human_expert
+    datasets:
+      - name: mlMMLU / MultiAlpaca
+        rationale: 多语言 QA 与指令数据，覆盖目标语言分布
+        expected_effect: 提升目标语言知识与指令遵从
+        source: huggingface:ju-research/MultiAlpaca
+      - name: 目标语言百科 / 网页语料
+        rationale: 补足低资源语言的预训练覆盖
+        expected_effect: 提升基础语言能力
+        source: human_expert
+    hyperparameters:
+      - knob: 多语言语料配比
+        direction: increase
+        typical_range: "按目标语言人口/重要性加权，总占比 10%~25%"
+        rationale: 语料配比决定多语言能力上限
+
+  # ------------------------------------------------------------------ 世界/常识知识
+  - intervention_id: EXP-knowledge-001
+    title: 世界 / 常识知识：知识语料 + 事实一致性过滤
+    applicable_tags: [world_knowledge, commonsense_knowledge, knowledge_gap]
+    category: data_mix
+    linked_rule_id: R-knowledge-001
+    expected_effect: MMLU 类知识 benchmark 提升 5~15 分位
+    evidence_strength: medium
+    source_type: human_expert
+    datasets:
+      - name: 百科 / 开放域 QA（Natural Questions 类）
+        rationale: 覆盖事实性知识与检索式问答
+        expected_effect: 提升知识回忆准确率
+        source: huggingface:nq_open
+      - name: ARC / HellaSwag 增强样本
+        rationale: 常识推理与物理直觉样本
+        expected_effect: 提升常识知识
+        source: huggingface:allenai/ai2_arc
+    hyperparameters:
+      - knob: 知识语料去重 + 事实一致性过滤
+        direction: enable
+        typical_range: "minhash 去重 + 语义冲突剔除"
+        rationale: 重复与矛盾语料会放大知识错误
+      - knob: 知识类语料在预训练中的配比
+        direction: increase
+        typical_range: "提升至 25%~35%"
+        rationale: 知识容量与语料规模强相关
+
+  # ------------------------------------------------------------------ 多模态
+  - intervention_id: EXP-vision-001
+    title: 多模态视觉：图文对齐 + 视觉指令
+    applicable_tags: [vision]
+    category: data_mix
+    linked_rule_id: R-vision-001
+    expected_effect: 视觉 benchmark 提升 10~20 分位
+    evidence_strength: medium
+    source_type: human_expert
+    datasets:
+      - name: ChartQA / DocVQA / OCR 语料
+        rationale: 图表、文档与屏幕理解，覆盖细粒度视觉解析
+        expected_effect: 提升结构化视觉信息提取
+        source: huggingface:lmg-anon/chartqa
+      - name: LLaVA 风格视觉指令数据
+        rationale: 图文对话指令样本，训练视觉问答与描述
+        expected_effect: 提升多模态指令遵从
+        source: huggingface:liuhaotian/LLaVA-Instruct-150K
+    hyperparameters:
+      - knob: 多模态对齐训练阶段
+        direction: enable
+        typical_range: "先 projector/视觉塔对齐，再全参 SFT"
+        rationale: 跳过对齐直接 SFT 会导致视觉特征未对齐
+      - knob: 视觉指令样本配比
+        direction: increase
+        typical_range: "提升至总 SFT 的 20%~40%"
+        rationale: 视觉指令不足会削弱图文任务泛化
+
+  # ------------------------------------------------------------------ 过早终止
+  - intervention_id: EXP-termination-001
+    title: 输出完整度：解码配置排查 + EOS 学习
+    applicable_tags: [premature_termination]
+    category: algorithm
+    linked_rule_id: R-algo-002
+    expected_effect: 降低不完整输出，缓解长答案截断
+    evidence_strength: medium
+    source_type: human_expert
+    datasets:
+      - name: 长答案完整样本（自建）
+        rationale: 覆盖需要长输出的任务，训练模型不在中途停止
+        expected_effect: 减少过早 EOS
+        source: human_expert
+    hyperparameters:
+      - knob: max_tokens / stop tokens
+        direction: increase
+        typical_range: "按任务最长答案 + 20% 余量"
+        rationale: 过早停止常与解码上限或 EOS 误判有关
+      - knob: 解码温度 / top-p
+        direction: tune
+        typical_range: "T ∈ [0.3, 0.7]，top-p ∈ [0.9, 1.0]"
+        rationale: 高熵采样可能提前触发 EOS 分支
+
+  # ------------------------------------------------------------------ 长度效率
+  - intervention_id: EXP-length-001
+    title: 输出简洁性：长度惩罚 reward
+    applicable_tags: [length_inefficiency]
+    category: reward_design
+    linked_rule_id: R-reward-003
+    expected_effect: 平均生成长度下降 10%~20%，准确率不降
+    evidence_strength: low
+    source_type: human_expert
+    datasets:
+      - name: 简洁偏好对（conciseness pairs）
+        rationale: 同一答案的冗长 / 简洁成对样本，配合 DPO 训练
+        expected_effect: 抑制冗余解释
+        source: human_expert
+    hyperparameters:
+      - knob: 长度惩罚 reward 权重
+        direction: increase
+        typical_range: "长度项占总 reward 的 2%~8%"
+        rationale: 权重过大损失准确率，过小无效果
+      - knob: 与参考模型 KL 系数
+        direction: tune
+        typical_range: "KL ∈ [0.01, 0.1]"
+        rationale: KL 项抑制奖励 hack 与过度压缩
+
+  # ------------------------------------------------------------------ 推理课程
+  - intervention_id: EXP-reasoning-001
+    title: 推理能力：课程学习（由易到难）
+    applicable_tags: [reasoning, reasoning_error]
+    category: curriculum
+    linked_rule_id: R-curriculum-001
+    expected_effect: 多步推理 benchmark 提升 5~15 分位
+    evidence_strength: medium
+    source_type: human_expert
+    datasets:
+      - name: 分级难度推理样本（按步骤数 / 成功率排序）
+        rationale: 由易到难递进训练，避免直接上高难度导致崩溃
+        expected_effect: 稳定爬升推理能力
+        source: human_expert
+      - name: 链式思考（CoT）语料
+        rationale: 显式推理过程样本，教会模型分步思考
+        expected_effect: 提升推理链完整性
+        source: community
+    hyperparameters:
+      - knob: 训练样本难度顺序
+        direction: easy_to_hard
+        typical_range: "按步骤数 / 通过率升序"
+        rationale: 高难度样本过早引入会放大误差
+      - knob: RL 阶段难度门槛
+        direction: tune
+        typical_range: "仅保留成功率 20%~80% 的样本"
+        rationale: 过难样本 reward 稀疏，过易无信息量
+
+  # ------------------------------------------------------------------ 数学验证
+  - intervention_id: EXP-math-verification-001
+    title: 计算验证：可执行验证器 reward
+    applicable_tags: [calculation_error, math]
+    category: reward_design
+    linked_rule_id: R-reward-001
+    expected_effect: 计算类错误率下降 20%~40%
+    evidence_strength: medium
+    source_type: paper
+    datasets:
+      - name: 符号 / 数值验证集
+        rationale: 可自动验证中间与最终计算正确性的样本
+        expected_effect: 为验证器提供训练与评测信号
+        source: human_expert
+    hyperparameters:
+      - knob: 验证器 reward（符号验证 / 数值核对）
+        direction: enable
+        typical_range: "与 PRM 联合，或单独用于计算题"
+        rationale: 计算结果可自动判定，比 LLM judge 更可靠
+
+  # ------------------------------------------------------------------ 幻觉 SFT
+  - intervention_id: EXP-hallucination-sft-001
+    title: 幻觉抑制：引用溯源 + 拒答模板 SFT
+    applicable_tags: [hallucination]
+    category: sft_construction
+    linked_rule_id: R-sft-003
+    expected_effect: 幻觉率下降 20%~40%
+    evidence_strength: medium
+    source_type: paper
+    datasets:
+      - name: 引用溯源 SFT 样本
+        rationale: 训练模型输出证据来源（引用 / 链接 / 原文摘录）
+        expected_effect: 强制事实可核查
+        source: human_expert
+      - name: '"不确定即声明不确定" 样本'
+        rationale: 在依据不足时输出"不确定 / 需要更多信息"
+        expected_effect: 降低无依据编造
+        source: human_expert
+    hyperparameters:
+      - knob: 引用格式约束
+        direction: enforce
+        typical_range: "统一引用模板，无法溯源则拒答"
+        rationale: 格式约束让"无引用=低可信"可被自动检测

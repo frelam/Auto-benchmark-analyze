@@ -77,17 +77,30 @@ class DiagnosisResult:
     failure_modes: dict[str, float] = field(default_factory=dict)
     representative_cases: list[dict[str, Any]] = field(default_factory=list)
     quantified_gap: float | None = None
+    # Correlation + bad-case driven "which capabilities are missing" (engine core).
+    capability_deficit: dict[str, float] = field(default_factory=dict)
+    deficit_narrative: str = ""
 
 
 @dataclass
 class Recommendation:
-    """A grounded optimization recommendation (section 6)."""
+    """A grounded optimization recommendation (section 6).
+
+    ``datasets`` / ``hyperparameters`` hold the executable specifics the
+    recommendation engine produces; ``reason_chain`` is the human-readable
+    evidence trail (benchmark correlation -> missing capability -> intervention).
+    """
 
     rule_id: str | None
-    source: str  # rule_base:<id> or external:<url>
+    source: str  # rule_base:<id> or experience:<id> or external:<url>
     evidence_strength: str
     action: str
     validation_experiment: str
+    datasets: list[dict[str, Any]] = field(default_factory=list)
+    hyperparameters: list[dict[str, Any]] = field(default_factory=list)
+    expected_effect: str = ""
+    reason_chain: list[str] = field(default_factory=list)
+    intervention_id: str | None = None
 
 
 @dataclass

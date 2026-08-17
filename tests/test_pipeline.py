@@ -26,7 +26,12 @@ def seeded_session(tmp_path):
 def test_build_offline_and_diagnose(seeded_session):
     session, settings = seeded_session
     versions = build_offline(session, settings)
-    assert set(versions) == {"coverage_version", "portfolio_version", "curves_version"}
+    assert set(versions) == {
+        "coverage_version",
+        "portfolio_version",
+        "curves_version",
+        "experience_version",
+    }
     for key, version_id in versions.items():
         asset_type = key.removesuffix("_version")
         assert db.load_asset_by_version(session, asset_type, version_id) is not None

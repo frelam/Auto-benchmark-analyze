@@ -25,7 +25,6 @@ from benchmark_diagnosis.core.types import (
     ClusterPortfolio,
     DiagnosisResult,
     ExpectationCurve,
-    Recommendation,
 )
 from benchmark_diagnosis.data import queries
 from benchmark_diagnosis.diagnosis.failure_mode_analyst import classify_failures
@@ -37,13 +36,13 @@ from benchmark_diagnosis.evaluation_orchestration.expectation_curves import (
     judge,
 )
 from benchmark_diagnosis.evaluation_orchestration.screening_runner import cluster_scores
-from benchmark_diagnosis.recommendation.groundedness_check import check_groundedness
-from benchmark_diagnosis.recommendation.retrieval import get_retriever
-from benchmark_diagnosis.recommendation.rule_base.loader import (
-    load_validated_rules,
-    match_rules,
+from benchmark_diagnosis.recommendation import engine
+from benchmark_diagnosis.recommendation.capability_inference import (
+    infer_capability_deficit,
 )
-from benchmark_diagnosis.recommendation.synthesizer import synthesize
+from benchmark_diagnosis.recommendation.experience_base import load_experience_base
+from benchmark_diagnosis.recommendation.retrieval import get_retriever
+from benchmark_diagnosis.recommendation.rule_base.loader import load_validated_rules
 from benchmark_diagnosis.representative_selection.portfolio_selector import (
     select_portfolios,
 )
@@ -119,7 +118,8 @@ def _build_coverage(session: Session, config: Settings) -> list:
 def build_offline(session: Session, config: Settings) -> dict[str, str]:
     """Build and persist the versioned offline assets (design doc layers 2-4).
 
-    Returns the version ids of the coverage table, portfolio, and curves.
+    Returns the version ids of the coverage table, portfolio, curves, and the
+    tool-maintained experience base (dataset / hyperparameter knowledge).
     """
     coverage = _build_coverage(session, config)
     coverage_version = db.save_asset(
@@ -132,10 +132,21 @@ def build_offline(session: Session, config: Settings) -> dict[str, str]:
     curves = fit_curves(session)
     curves_version = db.save_asset(session, "curves", _jsonable(curves))
 
+    experience_base = load_experience_base(
+        session, config.recommendation.experience_path
+    )
+    experience_version = db.save_asset(
+        session,
+        "experience",
+        _jsonable(experience_base.interventions),
+        note="tool-maintained experience base (datasets + hyperparameters + outcomes)",
+    )
+
     return {
         "coverage_version": coverage_version,
         "portfolio_version": portfolio_version,
         "curves_version": curves_version,
+        "experience_version": experience_version,
     }
 
 
@@ -148,12 +159,21 @@ def _judge_cluster(
 ) -> dict[str, Any] | None:
     """Weight-aggregate per-benchmark residual judgments into a cluster verdict."""
     judges: list[tuple[float, dict]] = []
+    benchmarks: list[dict] = []
     for b in portfolio.benchmarks:
         bid = b["benchmark_id"]
         if bid not in raw_scores:
             continue
         j = judge(model, bid, raw_scores[bid], curves, config.curves)
         judges.append((float(b["weight"]), j))
+        benchmarks.append(
+            {
+                "benchmark_id": bid,
+                "weight": b["weight"],
+                "score": raw_scores.get(bid),
+                "residual": j.get("residual"),
+            }
+        )
 
     if not judges:
         return None
@@ -183,14 +203,7 @@ def _judge_cluster(
         "z_score": weighted_z,
         "underperforming": under,
         "quantified_gap": quantified_gap,
-        "benchmarks": [
-            {
-                "benchmark_id": b["benchmark_id"],
-                "weight": b["weight"],
-                "score": raw_scores.get(b["benchmark_id"]),
-            }
-            for b in portfolio.benchmarks
-        ],
+        "benchmarks": benchmarks,
     }
 
 
@@ -204,79 +217,6 @@ def _make_analyst_llm(config: Settings) -> LLMClient | None:
         max_tokens=config.llm.max_tokens,
         temperature=config.llm.temperature,
         timeout_seconds=config.llm.timeout_seconds,
-    )
-
-
-def _recommend_cluster(
-    taxonomy,
-    rules,
-    diagnosis: DiagnosisResult,
-    config: Settings,
-    llm: LLMClient | None,
-    benchmark_tags: dict[str, list[str]] | None = None,
-) -> list[Recommendation]:
-    tags = list(diagnosis.failure_modes.keys())
-    if not tags:
-        tags = list((benchmark_tags or {}).get(diagnosis.sub_capability) or [])
-    if not tags and diagnosis.sub_capability:
-        tags = [diagnosis.sub_capability]
-    matched = match_rules(rules, tags)
-    if not matched:
-        return []
-
-    top_rules = [r for r, _ in matched[:3]]
-    retrieved = get_retriever(config.recommendation).retrieve(
-        ",".join(tags), config.recommendation.max_external_sources
-    )
-
-    evidence = {
-        "rule_ids": {r.rule_id for r in top_rules},
-        "sources": {f"rule_base:{r.rule_id}" for r in top_rules},
-        "numbers": set(diagnosis.failure_modes.values()),
-    }
-
-    if llm is not None:
-        try:
-            synth = synthesize(llm, diagnosis, top_rules, retrieved)
-            if not check_groundedness(synth, evidence):
-                return _actions_to_recs(synth.get("actions", []), top_rules)
-        except Exception:  # noqa: BLE001 - LLM failure degrades to rule-based
-            pass
-
-    return [
-        Recommendation(
-            rule_id=r.rule_id,
-            source=f"rule_base:{r.rule_id}",
-            evidence_strength=r.evidence_strength,
-            action=r.description,
-            validation_experiment=_default_validation(r.category),
-        )
-        for r in top_rules
-    ]
-
-
-def _actions_to_recs(actions: list[dict], rules) -> list[Recommendation]:
-    by_id = {r.rule_id: r for r in rules}
-    recs = []
-    for a in actions:
-        rid = a.get("rule_id")
-        rule = by_id.get(rid)
-        recs.append(
-            Recommendation(
-                rule_id=rid,
-                source=a.get("source", f"rule_base:{rid}" if rid else "external"),
-                evidence_strength=rule.evidence_strength if rule else "low",
-                action=a.get("action", ""),
-                validation_experiment=a.get("validation_experiment", ""),
-            )
-        )
-    return recs
-
-
-def _default_validation(category: str) -> str:
-    return (
-        "在小规模子集上做消融：固定其余训练配置，仅应用该改动，"
-        "对比目标 benchmark 的簇级得分变化（建议 >=1% 且跨 2 个随机种子稳定）。"
     )
 
 
@@ -313,9 +253,14 @@ def diagnose_model(
 
     portfolios = _revive_portfolios(db.load_latest_asset(session, "portfolio") or [])
     curves = _revive_curves(db.load_latest_asset(session, "curves") or [])
+    coverage = db.load_latest_asset(session, "coverage") or []
+    experience_base = load_experience_base(
+        session, config.recommendation.experience_path
+    )
     coverage_version = _latest_version(session, "coverage")
     portfolio_version = _latest_version(session, "portfolio")
     curves_version = _latest_version(session, "curves")
+    experience_version = _latest_version(session, "experience")
 
     taxonomy, rules = load_validated_rules()
     llm = None if advisor_mode == "rules" else _make_analyst_llm(config)
@@ -342,11 +287,32 @@ def diagnose_model(
                 llm, taxonomy, cases, sample_size=config.diagnosis.sample_size
             )
 
-        recs = (
-            []
-            if mode == "analyze"
-            else _recommend_cluster(taxonomy, rules, diagnosis, config, llm, benchmark_tags)
+        # Capability-deficit inference: benchmark correlation (coverage) +
+        # bad-case evidence (failure modes) -> which capabilities are missing.
+        deficit = infer_capability_deficit(
+            coverage,
+            verdict["benchmarks"],
+            diagnosis.failure_modes,
+            experience_base.failure_mode_capability_map,
         )
+        diagnosis.capability_deficit = deficit.strengths
+        diagnosis.deficit_narrative = deficit.narrative
+
+        recs = []
+        if mode == "full":
+            rec_tags = _rec_tags(diagnosis, benchmark_tags)
+            retrieved = get_retriever(config.recommendation).retrieve(
+                ",".join(rec_tags), config.recommendation.max_external_sources
+            )
+            recs = engine.recommend(
+                diagnosis,
+                experience_base,
+                config.recommendation,
+                llm,
+                rules=rules,
+                benchmark_tags=benchmark_tags,
+                retrieved=retrieved,
+            )
         clusters.append(
             {
                 "cluster_id": pf.cluster_id,
@@ -359,6 +325,8 @@ def diagnose_model(
                     "sub_capability": diagnosis.sub_capability,
                     "failure_modes": diagnosis.failure_modes,
                     "quantified_gap": diagnosis.quantified_gap,
+                    "capability_deficit": deficit.strengths,
+                    "deficit_narrative": deficit.narrative,
                 },
                 "recommendations": [_jsonable(r) for r in recs],
             }
@@ -380,9 +348,24 @@ def diagnose_model(
             "coverage_version": coverage_version,
             "portfolio_version": portfolio_version,
             "curves_version": curves_version,
+            "experience_version": experience_version,
         },
         "clusters": clusters,
     }
+
+
+def _rec_tags(
+    diagnosis: DiagnosisResult, benchmark_tags: dict[str, list[str]] | None
+) -> list[str]:
+    """Tags driving retrieval for a cluster (mirrors the engine's tag order)."""
+    tags = list(diagnosis.capability_deficit.keys())
+    if not tags:
+        tags = list(diagnosis.failure_modes.keys())
+    if not tags and diagnosis.sub_capability:
+        tags = list((benchmark_tags or {}).get(diagnosis.sub_capability) or [])
+    if not tags and diagnosis.sub_capability:
+        tags = [diagnosis.sub_capability]
+    return tags
 
 
 def _lowest_benchmark(

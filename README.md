@@ -6,7 +6,7 @@
 
 1. **评测**：桥接业界标准评测工具，跑一组经过"能力覆盖分析"精选的 benchmark；
 2. **诊断**：判断每个能力簇"是否不及预期"，并切片定位低分子类、用固定 taxonomy 分析失败模式；
-3. **建议**：基于经验规则库 + 外部检索 + LLM 综合，输出**可追溯、可验证**的优化建议。
+3. **建议**：根据 benchmark 相关性 + bad case 归因出"缺什么能力"，从工具维护的经验库（具体数据集 + 调参 knob + 历史效果）给出**可执行**建议，可选 LLM 重排，输出**可追溯、可验证**的优化建议。
 
 完整设计见 `benchmark-diagnosis-tool-design.md`，技术选型见 [`ARCHITECTURE.md`](ARCHITECTURE.md)。
 
@@ -99,12 +99,12 @@ benchmark-diagnosis run --model my-model --base-url http://<ip>:8000/v1
 
 <img src="examples/output/figures/fig_model_scores.png" alt="评测得分" width="640">
 
-**② 诊断与建议** —— 一眼看出：哪些 benchmark 分数偏低 → 属于什么能力 → 该补什么数据 / 调什么参数：
+**② 诊断与建议** —— 一眼看出：哪些 benchmark 分数偏低 → 归因出缺什么能力 → 该补什么数据集 / 调什么参数：
 
-| 能力簇 | 低分 benchmark（分数） | 缺失能力（归因） | 建议：数据 / 参数 |
-|---|---|---|---|
-| 长文本 · 数学推理 | `longbench_v2`（38） | 长文档理解、长上下文信息定位 | 增加长文档 / 多跳抽取 / 摘要样本；RoPE 外推、位置内插或长上下文继续预训练 |
-| 事实性 · 指令遵循 | `simpleqa`（24） | 短问答事实准确率、幻觉抑制 | 提高含证据链 / 引用溯源 / 事实核查的语料与 SFT 配比；加入"不确定即拒答"样本 |
-| 代码 · Agent | `swe_bench`（18） | 真实代码执行、工具调用 | 提高含单测与执行反馈的高质量代码占比；RL 阶段以单元测试 / 执行通过率为 reward |
+| 能力簇 | 低分 benchmark（分数） | 缺失能力（归因） | 建议：新增数据集 | 建议：调参 |
+|---|---|---|---|---|
+| 长文本 · 数学推理 | `longbench_v2`（38） | `long_context` / `reading_comprehension` | LongBench/L-Eval 长文 QA；书级 32k-128k 长文档语料 | `rope_scaling`（YaRN 外推）4k→32k-128k；长上下文继续预训练 tokens 提升 |
+| 事实性 · 指令遵循 | `simpleqa`（24） | `factuality` | SimpleQA/HaluEval；TruthfulQA + 引用溯源 SFT 语料 | "不确定即拒答" SFT 配比 5~15%；幻觉成对 DPO β∈[0.1,0.3] |
+| 代码 · Agent | `swe_bench`（18） | `code` / `agentic_tool_use` | CodeContests + BigCodeBench；SWE-bench 修复轨迹 | 执行通过率 reward；代码语料配比 15~25%；工具调用轨迹 SFT + 任务成功率 RL |
 
-> 每条建议来自规则库（`rule_base`），带 evidence 强度与验证实验设计；完整版与可追溯的资产版本号见 `report.md`。
+> 每条建议来自**工具维护的经验库**（`experience:<id>`，具体数据集 + 调参 knob + 历史效果），附缺失能力归因链（benchmark 相关性 + bad case → 能力 → 干预）与验证实验设计；完整版与可追溯的资产版本号（含 `experience` 资产）见 `report.md`。规则库与 LLM 可进一步参与（`advisor_mode`）。

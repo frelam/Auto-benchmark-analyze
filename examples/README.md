@@ -51,11 +51,16 @@ the tool refuses with a clear error.
 
 ## Advisor auto-selection
 
-`recommendation.advisor_mode` is `auto` by default:
+The recommendation engine first attributes the missing capabilities
+(benchmark correlation + bad cases), then scores the **tool-maintained
+experience base** — concrete datasets, hyperparameter knobs, expected effects,
+and accumulated outcome deltas — against that deficit. `recommendation.advisor_mode`
+is `auto` by default:
 
-- an analyst LLM is configured (`llm.model` set) → **LLM + rules** mode
-  (`llm_rules`): the LLM selects, orders, and explains recommendations;
-- otherwise → **rule-based** mode (`rules`), the deterministic rule base.
+- an analyst LLM is configured (`llm.model` set) → `llm_rules`: the LLM
+  **re-ranks** the experience-base candidates (grounded; it never invents
+  datasets or knobs);
+- otherwise → `rules`: the deterministic experience-base engine.
 
 `llm_rules` with no `llm.model` configured fails fast **before** evaluation, so
 a misconfigured advisor never wastes a run.
@@ -80,6 +85,9 @@ example — regenerate them any time with `bash examples/run_example.sh`
 
 `report.md` shows, per capability cluster, the weighted score, percentile,
 z-score, verdict, the scored benchmarks, a **quantified gap** (how far below the
-model's expectation curve each cluster sits), and — in `full` mode — the
-recommended optimization actions with validation experiments. The figures are
+model's expectation curve each cluster sits), a **missing-capability profile**
+(which capabilities the benchmark correlation + bad cases point to), and — in
+`full` mode — recommended **datasets to add**, **hyperparameter adjustments**,
+an **expected effect**, and a **reasoning chain** (deficit → intervention →
+historical outcome → linked rule) with validation experiments. The figures are
 linked inline at the bottom of the report.

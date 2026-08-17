@@ -47,9 +47,13 @@ recommendation:
   max_external_sources: 5
   # Advisor used to produce optimization recommendations:
   #   auto       -> llm_rules when llm.model is configured, else rules
-  #   llm_rules  -> LLM selects/orders/explains from the rule base (needs llm.model)
-  #   rules      -> deterministic rule-based only (ignores any configured LLM)
+  #   llm_rules  -> engine Stage 2: LLM re-ranks the experience-base candidates
+  #                 (grounded, needs llm.model)
+  #   rules      -> deterministic experience-base engine only (ignores any
+  #                 configured LLM)
   advisor_mode: auto
+  max_actions: 3               # max interventions per cluster recommendation
+  experience_path: null        # null => packaged experience base (YAML seed)
 
 # Unified run profile consumed by `benchmark-diagnosis run`. The same keys can
 # be passed as CLI args; CLI args take precedence over this section.

@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from benchmark_diagnosis.core.types import DiagnosisResult
+from benchmark_diagnosis.recommendation.experience_base import Intervention
 from benchmark_diagnosis.recommendation.rule_base.loader import Rule, match_rules
 
 _MAX_FALLBACK_ACTIONS = 3
@@ -29,33 +30,41 @@ def synthesize(
     diagnosis: DiagnosisResult,
     rules: list[Rule],
     retrieved: list[dict],
+    *,
+    interventions: list[Intervention] | None = None,
 ) -> dict:
-    """Synthesize a grounded recommendation dict from diagnosis + rule evidence.
+    """Synthesize a grounded recommendation dict from diagnosis + evidence.
 
     Args:
         llm: Duck-typed analyst LLM exposing ``complete_json(messages) -> Any``.
         diagnosis: Structured diagnosis (cluster, failure-mode distribution,
-            representative cases, quantified gap).
+            representative cases, quantified gap, capability deficit).
         rules: Matched internal rules (id + title + description + evidence
             strength) the LLM may select from.
         retrieved: External snippets (may be empty).
+        interventions: Optional candidate experience-base interventions the LLM
+            may select from (by ``intervention_id``). When present they are added
+            to the prompt; each action must then reference an ``intervention_id``
+            or a ``rule_id``. When None/empty the legacy rule-only contract is
+            preserved unchanged.
 
     Returns:
         A normalized dict with:
             ``diagnosis_basis``: prose restating the diagnosis with key numbers;
-            ``actions``: list of ``{rule_id, source, action, validation_experiment}``.
+            ``actions``: list of ``{rule_id, intervention_id, source, action,
+            validation_experiment}``.
         If the LLM call raises or returns unusable JSON, a deterministic
-        rule-based synthesis (one action per top matched rule, up to 3) is
-        returned instead.
+        synthesis (interventions first, else one action per top matched rule,
+        up to 3) is returned instead.
     """
-    messages = _build_synthesis_messages(diagnosis, rules, retrieved)
+    messages = _build_synthesis_messages(diagnosis, rules, retrieved, interventions)
     try:
         raw = llm.complete_json(messages)
     except Exception:
         raw = None
 
     if raw is None or not isinstance(raw, dict):
-        return _deterministic_synthesis(diagnosis, rules)
+        return _deterministic_synthesis(diagnosis, rules, interventions)
     return _normalize_synthesis(raw, diagnosis)
 
 
@@ -63,26 +72,37 @@ def _build_synthesis_messages(
     diagnosis: DiagnosisResult,
     rules: list[Rule],
     retrieved: list[dict],
+    interventions: list[Intervention] | None = None,
 ) -> list[dict[str, str]]:
     """Build the system+user prompt constraining the LLM to the evidence set."""
     rules_text = "\n".join(
         f"- [{rule.rule_id}] ({rule.evidence_strength}) {rule.title}\n  {rule.description}"
         for rule in rules
     )
+    interventions_text = "\n".join(
+        f"- [{intervention.intervention_id}] ({intervention.evidence_strength}) "
+        f"{intervention.title}"
+        for intervention in (interventions or [])
+    ) or "(none)"
     retrieved_text = "\n".join(f"- {_format_snippet(snippet)}" for snippet in retrieved) or "(none)"
     system = (
         "You select, order, combine and explain optimization recommendations for an "
         "LLM training team. Base every action ONLY on the provided diagnosis, "
-        "internal rules, and retrieved snippets; never invent rule ids, sources or "
-        "numbers. Reply with JSON of the form "
+        "internal rules, retrieved snippets, and candidate interventions; never "
+        "invent intervention ids, rule ids, sources or numbers. Each action must "
+        "reference exactly one evidence item: an intervention_id from CANDIDATE "
+        "INTERVENTIONS, or a rule_id from MATCHED RULES. Reply with JSON of the "
+        "form "
         '{"diagnosis_basis": "<prose restating the diagnosis with its key '
-        'numbers>", "actions": [{"rule_id": "<id or null>", "source": '
-        '"rule_base:<id>" or "external:<url>", "action": "<text>", '
-        '"validation_experiment": "<small-scale validation design>"}]}.'
+        'numbers>", "actions": [{"intervention_id": "<id or null>", "rule_id": '
+        '"<id or null>", "source": "experience:<id>" or "rule_base:<id>" or '
+        '"external:<url>", "action": "<text>", "validation_experiment": '
+        '"<small-scale validation design>"}]}.'
     )
     user = (
         f"DIAGNOSIS:\n{_build_diagnosis_basis(diagnosis)}\n\n"
         f"MATCHED RULES (id, evidence_strength, title, description):\n{rules_text}\n\n"
+        f"CANDIDATE INTERVENTIONS (id, evidence_strength, title):\n{interventions_text}\n\n"
         f"RETRIEVED EXTERNAL SNIPPETS:\n{retrieved_text}"
     )
     return [
@@ -115,6 +135,10 @@ def _build_diagnosis_basis(diagnosis: DiagnosisResult) -> str:
     )
     if distribution:
         parts.append(f"failure modes [{distribution}]")
+    deficit = diagnosis.capability_deficit or {}
+    if deficit:
+        ordered = sorted(deficit, key=lambda tag: deficit[tag], reverse=True)
+        parts.append(f"deficit [{', '.join(ordered)}]")
     return "; ".join(parts)
 
 
@@ -141,10 +165,18 @@ def _normalize_action(action: Any) -> dict | None:
     rule_id = action.get("rule_id")
     if rule_id is not None and not isinstance(rule_id, str):
         rule_id = None
+    intervention_id = action.get("intervention_id")
+    if intervention_id is not None and not isinstance(intervention_id, str):
+        intervention_id = None
 
     source = action.get("source")
     if not isinstance(source, str) or not source:
-        source = f"rule_base:{rule_id}" if rule_id else "external:llm"
+        if intervention_id:
+            source = f"experience:{intervention_id}"
+        elif rule_id:
+            source = f"rule_base:{rule_id}"
+        else:
+            source = "external:llm"
 
     action_text = action.get("action")
     if not isinstance(action_text, str) or not action_text:
@@ -156,23 +188,39 @@ def _normalize_action(action: Any) -> dict | None:
 
     return {
         "rule_id": rule_id,
+        "intervention_id": intervention_id,
         "source": source,
         "action": action_text,
         "validation_experiment": validation,
     }
 
 
-def _deterministic_synthesis(diagnosis: DiagnosisResult, rules: list[Rule]) -> dict:
-    """No-LLM fallback: one action per top matched rule, up to 3."""
-    tags = [mode for mode, fraction in diagnosis.failure_modes.items() if fraction > 0]
-    top_rules = match_rules(rules, tags)
-    actions = [
-        {
-            "rule_id": rule.rule_id,
-            "source": f"rule_base:{rule.rule_id}",
-            "action": rule.description,
-            "validation_experiment": _FALLBACK_VALIDATION,
-        }
-        for rule, _score in top_rules[:_MAX_FALLBACK_ACTIONS]
-    ]
+def _deterministic_synthesis(
+    diagnosis: DiagnosisResult,
+    rules: list[Rule],
+    interventions: list[Intervention] | None = None,
+) -> dict:
+    """No-LLM fallback: interventions first, else one action per top rule (<=3)."""
+    if interventions:
+        actions = [
+            {
+                "intervention_id": intervention.intervention_id,
+                "source": f"experience:{intervention.intervention_id}",
+                "action": intervention.title,
+                "validation_experiment": _FALLBACK_VALIDATION,
+            }
+            for intervention in interventions[:_MAX_FALLBACK_ACTIONS]
+        ]
+    else:
+        tags = [mode for mode, fraction in diagnosis.failure_modes.items() if fraction > 0]
+        top_rules = match_rules(rules, tags)
+        actions = [
+            {
+                "rule_id": rule.rule_id,
+                "source": f"rule_base:{rule.rule_id}",
+                "action": rule.description,
+                "validation_experiment": _FALLBACK_VALIDATION,
+            }
+            for rule, _score in top_rules[:_MAX_FALLBACK_ACTIONS]
+        ]
     return {"diagnosis_basis": _build_diagnosis_basis(diagnosis), "actions": actions}

@@ -28,7 +28,8 @@ def render_markdown(report: dict[str, Any]) -> str:
                  f"**advisor**: {report.get('advisor_mode', 'rules')}")
     lines.append(f"- **asset versions**: coverage=`{versions.get('coverage_version')}` "
                  f"portfolio=`{versions.get('portfolio_version')}` "
-                 f"curves=`{versions.get('curves_version')}`")
+                 f"curves=`{versions.get('curves_version')}` "
+                 f"experience=`{versions.get('experience_version')}`")
     lines.append("")
 
     clusters = report.get("clusters", [])
@@ -65,6 +66,23 @@ def render_markdown(report: dict[str, Any]) -> str:
             lines.append("")
             lines.append(f"- sub_capability: `{diagnosis.get('sub_capability')}`")
             lines.append(f"- quantified_gap: {_fmt(diagnosis.get('quantified_gap'), 2)}")
+            deficit = diagnosis.get("capability_deficit") or {}
+            if deficit:
+                lines.append("")
+                lines.append("**Missing-capability profile** (from benchmark "
+                             "correlation + bad-case analysis):")
+                lines.append("")
+                lines.append("| capability | deficit strength |")
+                lines.append("|---|---|")
+                for tag, strength in sorted(
+                    deficit.items(), key=lambda kv: kv[1], reverse=True
+                ):
+                    lines.append(f"| `{tag}` | {_fmt(strength, 3)} |")
+                narrative = diagnosis.get("deficit_narrative")
+                if narrative:
+                    lines.append("")
+                    lines.append(f"> {narrative}")
+                lines.append("")
             failure_modes = diagnosis.get("failure_modes") or {}
             if failure_modes:
                 lines.append("")
@@ -83,6 +101,28 @@ def render_markdown(report: dict[str, Any]) -> str:
                     f"**{i}. [{r.get('rule_id', 'external')}] {r.get('action', '')}** "
                     f"_(source: {r.get('source', '?')}, evidence: {r.get('evidence_strength', '?')})_"
                 )
+                if r.get("expected_effect"):
+                    lines.append(f"   - *Expected effect*: {r['expected_effect']}")
+                datasets = r.get("datasets") or []
+                if datasets:
+                    lines.append("   - *Datasets to add*:")
+                    for d in datasets:
+                        lines.append(
+                            f"     - `{d.get('name')}` — {d.get('rationale', '')}"
+                        )
+                hyperparameters = r.get("hyperparameters") or []
+                if hyperparameters:
+                    lines.append("   - *Hyperparameter adjustments*:")
+                    for h in hyperparameters:
+                        lines.append(
+                            f"     - `{h.get('knob')}` → {h.get('direction')} "
+                            f"(typical range: {h.get('typical_range', '—')})"
+                        )
+                reason_chain = r.get("reason_chain") or []
+                if reason_chain:
+                    lines.append("   - *Reasoning*:")
+                    for reason in reason_chain:
+                        lines.append(f"     - {reason}")
                 if r.get("validation_experiment"):
                     lines.append(f"   - *Validation*: {r['validation_experiment']}")
                 lines.append("")

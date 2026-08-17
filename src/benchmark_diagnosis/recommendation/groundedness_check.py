@@ -12,8 +12,10 @@ from __future__ import annotations
 import re
 from typing import Any
 
-# Matches integers and decimal numbers in the diagnosis-basis prose.
-_NUMBER_RE = re.compile(r"\d+(?:\.\d+)?")
+# Matches standalone integers and decimal numbers in the diagnosis-basis prose.
+# Token-boundary lookarounds keep identifier digits (cluster "C1", "V2", "GSM8K",
+# model "8b") out of the check — only numbers that read as quantities count.
+_NUMBER_RE = re.compile(r"(?<![\w.])\d+(?:\.\d+)?(?![\w.])")
 
 _TOLERANCE = 1e-6
 
@@ -23,10 +25,11 @@ def check_groundedness(synthesis: dict, evidence: dict) -> list[str]:
 
     Args:
         synthesis: Output of :func:`synthesize` with ``diagnosis_basis`` prose and
-            a list of ``actions`` (each ``{rule_id, source, action,
-            validation_experiment}``).
+            a list of ``actions`` (each ``{rule_id, intervention_id, source,
+            action, validation_experiment}``).
         evidence: ``{"rule_ids": set[str], "sources": set[str],
-            "numbers": set[float]}`` — everything the LLM was allowed to reference.
+            "numbers": set[float]}`` plus the optional ``"intervention_ids":
+            set[str]`` — everything the LLM was allowed to reference.
 
     Returns:
         A list of human-readable violation strings; an empty list means the
@@ -36,6 +39,7 @@ def check_groundedness(synthesis: dict, evidence: dict) -> list[str]:
     rule_ids = _as_set(evidence.get("rule_ids"))
     sources = _as_set(evidence.get("sources"))
     numbers = _as_set(evidence.get("numbers"))
+    intervention_ids = _as_set(evidence.get("intervention_ids"))
 
     actions = synthesis.get("actions", [])
     if not isinstance(actions, list):
@@ -53,6 +57,19 @@ def check_groundedness(synthesis: dict, evidence: dict) -> list[str]:
             if (
                 isinstance(source, str)
                 and source.startswith("rule_base:")
+                and source not in sources
+            ):
+                violations.append(f"action[{index}]: source {source!r} not in evidence")
+        intervention_id = action.get("intervention_id")
+        if intervention_id is not None:
+            if intervention_id not in intervention_ids:
+                violations.append(
+                    f"action[{index}]: intervention_id {intervention_id!r} not in evidence"
+                )
+            source = action.get("source")
+            if (
+                isinstance(source, str)
+                and source.startswith("experience:")
                 and source not in sources
             ):
                 violations.append(f"action[{index}]: source {source!r} not in evidence")

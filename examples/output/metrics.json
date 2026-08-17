@@ -7,13 +7,14 @@
     "active_params": 8.0,
     "release_date": "2024-04-18"
   },
-  "generated_at": "2026-08-14T10:03:27.804677",
+  "generated_at": "2026-08-17T01:27:54.380435",
   "mode": "full",
   "advisor_mode": "rules",
   "versions": {
-    "coverage_version": "coverage-20260814084434-3e725b",
-    "portfolio_version": "portfolio-20260814084434-ecae13",
-    "curves_version": "curves-20260814084434-ee521f"
+    "coverage_version": "coverage-20260817012754-16df85",
+    "portfolio_version": "portfolio-20260817012754-01b3ba",
+    "curves_version": "curves-20260817012754-9e6692",
+    "experience_version": "experience-20260817012754-e06761"
   },
   "clusters": [
     {
@@ -26,38 +27,105 @@
         {
           "benchmark_id": "longbench_v2",
           "weight": 0.8339027051376603,
-          "score": 38.0
-        },
-        {
-          "benchmark_id": "frontiermath",
-          "weight": 0.11708882640668815,
-          "score": null
+          "score": 38.0,
+          "residual": -0.1567084631853819
         },
         {
           "benchmark_id": "mmlu_pro",
           "weight": 0.049008468455651516,
-          "score": 50.0
+          "score": 50.0,
+          "residual": -0.24098224373238586
         }
       ],
       "diagnosis": {
         "sub_capability": "longbench_v2",
         "failure_modes": {},
-        "quantified_gap": 0.1613863164497905
+        "quantified_gap": 0.1613863164497905,
+        "capability_deficit": {
+          "long_context": 0.5,
+          "reading_comprehension": 0.5
+        },
+        "deficit_narrative": "该簇缺失能力：long_context(0.50)、reading_comprehension(0.50)；主要驱动：mmlu_pro(0.24)、longbench_v2(0.16)"
       },
       "recommendations": [
         {
-          "rule_id": "R-reading-001",
-          "source": "rule_base:R-reading-001",
-          "evidence_strength": "medium",
-          "action": "增加长文档理解、多跳抽取与摘要类样本，配合长上下文训练策略，改善信息 定位与利用。",
-          "validation_experiment": "在小规模子集上做消融：固定其余训练配置，仅应用该改动，对比目标 benchmark 的簇级得分变化（建议 >=1% 且跨 2 个随机种子稳定）。"
+          "rule_id": "R-longctx-001",
+          "source": "experience:EXP-longctx-001",
+          "evidence_strength": "high",
+          "action": "长上下文能力：长文档语料 + 位置编码外推",
+          "validation_experiment": "在小规模子集上做消融：固定其余训练配置，仅应用该改动，对比目标 benchmark 的簇级得分变化（建议 >=1% 且跨 2 个随机种子稳定）。",
+          "datasets": [
+            {
+              "name": "LongBench 训练版 / L-Eval 长文 QA",
+              "rationale": "覆盖 16 类长文本任务，可拆分为指令微调样本，直接对齐评测分布",
+              "expected_effect": "提升长文档信息定位与多跳抽取",
+              "source": "huggingface:THUDM/LongBench"
+            },
+            {
+              "name": "书级长文档语料（BookSum 类 / 自建 32k-128k 文档）",
+              "rationale": "长上下文继续预训练需要连贯长文档，而非拼接的短文本",
+              "expected_effect": "让模型在真实长文中学会利用远处依赖",
+              "source": "human_expert"
+            }
+          ],
+          "hyperparameters": [
+            {
+              "knob": "rope_scaling / max_position_embeddings",
+              "direction": "extend",
+              "typical_range": "4k -> 32k-128k（linear 或 YaRN 外推）",
+              "rationale": "直接外推可复用预训练权重；YaRN 适合超长输入"
+            },
+            {
+              "knob": "long-context continued-pretraining tokens",
+              "direction": "increase",
+              "typical_range": "50B~200B tokens",
+              "rationale": "仅位置外推不足以激活长文能力，需长文继续预训练"
+            }
+          ],
+          "expected_effect": "LongBench V2 / 长文档 benchmark 提升 10~25 分位",
+          "reason_chain": [
+            "该簇缺失能力：long_context(0.50)、reading_comprehension(0.50)；主要驱动：mmlu_pro(0.24)、longbench_v2(0.16)",
+            "匹配干预 EXP-longctx-001：长上下文能力：长文档语料 + 位置编码外推",
+            "历史 1 次实验平均提升 +2.1%（分数变化）",
+            "关联规则 R-longctx-001（medium 证据）"
+          ],
+          "intervention_id": "EXP-longctx-001"
         },
         {
-          "rule_id": "R-longctx-001",
-          "source": "rule_base:R-longctx-001",
+          "rule_id": "R-reading-001",
+          "source": "experience:EXP-reading-001",
           "evidence_strength": "medium",
-          "action": "对长上下文任务采用 RoPE 外推 / 位置内插 / 长上下文继续预训练，并构造 长文档信息定位与长链推理样本，改善长输入下的信息利用。",
-          "validation_experiment": "在小规模子集上做消融：固定其余训练配置，仅应用该改动，对比目标 benchmark 的簇级得分变化（建议 >=1% 且跨 2 个随机种子稳定）。"
+          "action": "阅读理解：多跳抽取与摘要样本增强",
+          "validation_experiment": "在小规模子集上做消融：固定其余训练配置，仅应用该改动，对比目标 benchmark 的簇级得分变化（建议 >=1% 且跨 2 个随机种子稳定）。",
+          "datasets": [
+            {
+              "name": "SQuAD 2.0 / RACE",
+              "rationale": "基础抽取式与选择式阅读理解，覆盖拒答（无答案）场景",
+              "expected_effect": "提升定位式理解与拒答能力",
+              "source": "huggingface:rajpurkar/squad_v2"
+            },
+            {
+              "name": "HotpotQA",
+              "rationale": "多跳推理式阅读理解，训练跨段落信息融合",
+              "expected_effect": "提升多跳抽取与证据融合",
+              "source": "huggingface:hotpotqa/hotpot_qa"
+            }
+          ],
+          "hyperparameters": [
+            {
+              "knob": "长文/抽取类样本在 SFT 中的配比",
+              "direction": "increase",
+              "typical_range": "提升至总 SFT 的 5%~15%",
+              "rationale": "低配比时模型对长文档与多跳问题泛化不足"
+            }
+          ],
+          "expected_effect": "阅读理解类 benchmark 提升 5~15 分位",
+          "reason_chain": [
+            "该簇缺失能力：long_context(0.50)、reading_comprehension(0.50)；主要驱动：mmlu_pro(0.24)、longbench_v2(0.16)",
+            "匹配干预 EXP-reading-001：阅读理解：多跳抽取与摘要样本增强",
+            "关联规则 R-reading-001（medium 证据）"
+          ],
+          "intervention_id": "EXP-reading-001"
         }
       ]
     },
@@ -71,31 +139,68 @@
         {
           "benchmark_id": "simpleqa",
           "weight": 0.935254801125754,
-          "score": 24.0
-        },
-        {
-          "benchmark_id": "ifeval",
-          "weight": 0.037462764960141705,
-          "score": null
+          "score": 24.0,
+          "residual": -0.2636399192713058
         },
         {
           "benchmark_id": "math",
           "weight": 0.02728243391410431,
-          "score": 40.0
+          "score": 40.0,
+          "residual": 0.12526391015363675
         }
       ],
       "diagnosis": {
         "sub_capability": "simpleqa",
         "failure_modes": {},
-        "quantified_gap": 0.2526167165951114
+        "quantified_gap": 0.2526167165951114,
+        "capability_deficit": {
+          "factuality": 1.0
+        },
+        "deficit_narrative": "该簇缺失能力：factuality(1.00)；主要驱动：simpleqa(0.26)"
       },
       "recommendations": [
         {
           "rule_id": "R-factuality-001",
-          "source": "rule_base:R-factuality-001",
+          "source": "experience:EXP-factuality-001",
           "evidence_strength": "high",
-          "action": "提高含证据链、引用溯源、事实核查的语料与 SFT 样本配比，配合\"不确定即声明 不确定\"的拒答 / 反事实样本，抑制幻觉，提升短问答事实准确率。",
-          "validation_experiment": "在小规模子集上做消融：固定其余训练配置，仅应用该改动，对比目标 benchmark 的簇级得分变化（建议 >=1% 且跨 2 个随机种子稳定）。"
+          "action": "事实性：证据链语料 + 不确定即声明不确定",
+          "validation_experiment": "在小规模子集上做消融：固定其余训练配置，仅应用该改动，对比目标 benchmark 的簇级得分变化（建议 >=1% 且跨 2 个随机种子稳定）。",
+          "datasets": [
+            {
+              "name": "SimpleQA / HaluEval",
+              "rationale": "短问答事实性与幻觉检测样本，训练\"有依据才回答\"",
+              "expected_effect": "降低无依据编造",
+              "source": "huggingface:openai/simpleqa"
+            },
+            {
+              "name": "TruthfulQA + 引用溯源 SFT 语料",
+              "rationale": "反事实 + 引用格式样本，配合\"不确定即拒答\"模板",
+              "expected_effect": "抑制幻觉、提升引用溯源",
+              "source": "huggingface:truthfulq/truthful_qa"
+            }
+          ],
+          "hyperparameters": [
+            {
+              "knob": "\"不确定即拒答\" SFT 样本配比",
+              "direction": "increase",
+              "typical_range": "5%~15%",
+              "rationale": "教会模型在依据不足时声明不确定而非强行生成"
+            },
+            {
+              "knob": "幻觉成对 DPO（编造 vs 拒答）",
+              "direction": "enable",
+              "typical_range": "β ∈ [0.1, 0.3]",
+              "rationale": "直接校正拒答边界，降低过度自信生成"
+            }
+          ],
+          "expected_effect": "SimpleQA / 短问答事实准确率提升 10~20 分位",
+          "reason_chain": [
+            "该簇缺失能力：factuality(1.00)；主要驱动：simpleqa(0.26)",
+            "匹配干预 EXP-factuality-001：事实性：证据链语料 + 不确定即声明不确定",
+            "历史 1 次实验平均提升 +1.5%（分数变化）",
+            "关联规则 R-factuality-001（high 证据）"
+          ],
+          "intervention_id": "EXP-factuality-001"
         }
       ]
     },
@@ -109,31 +214,105 @@
         {
           "benchmark_id": "swe_bench",
           "weight": 0.9259543608651996,
-          "score": 18.0
-        },
-        {
-          "benchmark_id": "tau2_bench",
-          "weight": 0.0509389048951525,
-          "score": null
-        },
-        {
-          "benchmark_id": "livecodebench",
-          "weight": 0.02310673423964799,
-          "score": null
+          "score": 18.0,
+          "residual": -0.10673385013930631
         }
       ],
       "diagnosis": {
         "sub_capability": "swe_bench",
         "failure_modes": {},
-        "quantified_gap": 0.10673385013930631
+        "quantified_gap": 0.10673385013930631,
+        "capability_deficit": {
+          "code": 0.5,
+          "agentic_tool_use": 0.5
+        },
+        "deficit_narrative": "该簇缺失能力：code(0.50)、agentic_tool_use(0.50)；主要驱动：swe_bench(0.11)"
       },
       "recommendations": [
         {
           "rule_id": "R-code-001",
-          "source": "rule_base:R-code-001",
+          "source": "experience:EXP-code-001",
           "evidence_strength": "high",
-          "action": "提高高质量代码（含单测与执行结果反馈）预训练 / SFT 数据占比，并在 RL 阶段 引入单元测试 / 执行通过率作为 reward，强化\"可运行\"而非\"看着对\"。",
-          "validation_experiment": "在小规模子集上做消融：固定其余训练配置，仅应用该改动，对比目标 benchmark 的簇级得分变化（建议 >=1% 且跨 2 个随机种子稳定）。"
+          "action": "代码能力：可执行验证 + 代码语料增强",
+          "validation_experiment": "在小规模子集上做消融：固定其余训练配置，仅应用该改动，对比目标 benchmark 的簇级得分变化（建议 >=1% 且跨 2 个随机种子稳定）。",
+          "datasets": [
+            {
+              "name": "CodeContests + BigCodeBench",
+              "rationale": "竞赛级与指令级代码样本，含单测，强调\"可运行\"",
+              "expected_effect": "提升代码正确性与边界处理",
+              "source": "huggingface:deepmind/code_contests"
+            },
+            {
+              "name": "SWE-bench 轨迹（问题→修复→单测）",
+              "rationale": "真实仓库级问题解决轨迹，训练定位与修复",
+              "expected_effect": "提升 agent 式代码修复能力",
+              "source": "huggingface:princeton-nlp/SWE-bench"
+            }
+          ],
+          "hyperparameters": [
+            {
+              "knob": "执行通过率 reward（单元测试 / pass@k）",
+              "direction": "enable",
+              "typical_range": "RL 阶段以 test 通过为 reward",
+              "rationale": "强化\"可运行\"而非\"看着对\""
+            },
+            {
+              "knob": "代码语料在预训练中的配比",
+              "direction": "increase",
+              "typical_range": "提升至 15%~25%",
+              "rationale": "代码语料不足导致语法与 API 知识薄弱"
+            }
+          ],
+          "expected_effect": "SWE-bench / LiveCodeBench 提升 10~20 分位",
+          "reason_chain": [
+            "该簇缺失能力：code(0.50)、agentic_tool_use(0.50)；主要驱动：swe_bench(0.11)",
+            "匹配干预 EXP-code-001：代码能力：可执行验证 + 代码语料增强",
+            "历史 1 次实验平均提升 +1.8%（分数变化）",
+            "关联规则 R-code-001（high 证据）"
+          ],
+          "intervention_id": "EXP-code-001"
+        },
+        {
+          "rule_id": "R-sft-002",
+          "source": "experience:EXP-agent-001",
+          "evidence_strength": "medium",
+          "action": "Agent / 工具调用：函数调用轨迹 SFT",
+          "validation_experiment": "在小规模子集上做消融：固定其余训练配置，仅应用该改动，对比目标 benchmark 的簇级得分变化（建议 >=1% 且跨 2 个随机种子稳定）。",
+          "datasets": [
+            {
+              "name": "τ-bench / ToolBench 轨迹",
+              "rationale": "多轮工具调用轨迹（含错误调用与纠正），训练收到工具返回后正确利用",
+              "expected_effect": "降低参数错误与信息忽略",
+              "source": "community"
+            },
+            {
+              "name": "Gorilla 函数调用样本",
+              "rationale": "API 文档感知的函数调用数据，覆盖常见 API",
+              "expected_effect": "提升工具选择与参数生成",
+              "source": "huggingface:gorilla-llm/gorilla-apis"
+            }
+          ],
+          "hyperparameters": [
+            {
+              "knob": "工具调用格式一致性",
+              "direction": "enforce",
+              "typical_range": "统一 function-call schema / JSON",
+              "rationale": "格式不一致会破坏 agent 循环的解析环节"
+            },
+            {
+              "knob": "任务成功率 RL reward",
+              "direction": "enable",
+              "typical_range": "以多轮任务是否成功为 reward",
+              "rationale": "轨迹级成功信号强于单步格式正确"
+            }
+          ],
+          "expected_effect": "τ-bench / 工具调用类 benchmark 提升 10~20 分位",
+          "reason_chain": [
+            "该簇缺失能力：code(0.50)、agentic_tool_use(0.50)；主要驱动：swe_bench(0.11)",
+            "匹配干预 EXP-agent-001：Agent / 工具调用：函数调用轨迹 SFT",
+            "关联规则 R-sft-002（medium 证据）"
+          ],
+          "intervention_id": "EXP-agent-001"
         }
       ]
     }
