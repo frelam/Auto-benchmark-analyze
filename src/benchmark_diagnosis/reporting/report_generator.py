@@ -62,76 +62,17 @@ def render_markdown(report: dict[str, Any]) -> str:
 
         diagnosis = c.get("diagnosis") or {}
         if diagnosis:
-            lines.append("### Diagnosis")
+            lines.append(
+                f"- sub_capability: `{diagnosis.get('sub_capability')}` · "
+                f"quantified_gap: {_fmt(diagnosis.get('quantified_gap'), 2)}"
+            )
             lines.append("")
-            lines.append(f"- sub_capability: `{diagnosis.get('sub_capability')}`")
-            lines.append(f"- quantified_gap: {_fmt(diagnosis.get('quantified_gap'), 2)}")
-            deficit = diagnosis.get("capability_deficit") or {}
-            if deficit:
-                lines.append("")
-                lines.append("**Missing-capability profile** (from benchmark "
-                             "correlation + bad-case analysis):")
-                lines.append("")
-                lines.append("| capability | deficit strength |")
-                lines.append("|---|---|")
-                for tag, strength in sorted(
-                    deficit.items(), key=lambda kv: kv[1], reverse=True
-                ):
-                    lines.append(f"| `{tag}` | {_fmt(strength, 3)} |")
-                narrative = diagnosis.get("deficit_narrative")
-                if narrative:
-                    lines.append("")
-                    lines.append(f"> {narrative}")
-                lines.append("")
-            failure_modes = diagnosis.get("failure_modes") or {}
-            if failure_modes:
-                lines.append("")
-                lines.append("| failure mode | fraction |")
-                lines.append("|---|---|")
-                for mode, frac in failure_modes.items():
-                    lines.append(f"| `{mode}` | {_fmt(frac, 3)} |")
-        lines.append("")
-
-        recs = c.get("recommendations") or []
-        if recs:
-            lines.append("### Recommendations")
-            lines.append("")
-            for i, r in enumerate(recs, 1):
-                lines.append(
-                    f"**{i}. [{r.get('rule_id', 'external')}] {r.get('action', '')}** "
-                    f"_(source: {r.get('source', '?')}, evidence: {r.get('evidence_strength', '?')})_"
-                )
-                if r.get("expected_effect"):
-                    lines.append(f"   - *Expected effect*: {r['expected_effect']}")
-                datasets = r.get("datasets") or []
-                if datasets:
-                    lines.append("   - *Datasets to add*:")
-                    for d in datasets:
-                        lines.append(
-                            f"     - `{d.get('name')}` — {d.get('rationale', '')}"
-                        )
-                hyperparameters = r.get("hyperparameters") or []
-                if hyperparameters:
-                    lines.append("   - *Hyperparameter adjustments*:")
-                    for h in hyperparameters:
-                        lines.append(
-                            f"     - `{h.get('knob')}` → {h.get('direction')} "
-                            f"(typical range: {h.get('typical_range', '—')})"
-                        )
-                reason_chain = r.get("reason_chain") or []
-                if reason_chain:
-                    lines.append("   - *Reasoning*:")
-                    for reason in reason_chain:
-                        lines.append(f"     - {reason}")
-                if r.get("validation_experiment"):
-                    lines.append(f"   - *Validation*: {r['validation_experiment']}")
-                lines.append("")
         lines.append("---")
         lines.append("")
 
-    intelligent = report.get("intelligent_diagnosis")
-    if intelligent:
-        lines.append(render_intelligent_diagnosis(intelligent))
+    diagnosis_block = report.get("diagnosis")
+    if diagnosis_block:
+        lines.append(render_diagnosis(diagnosis_block))
         lines.append("")
 
     figures = report.get("figures") or []
@@ -168,10 +109,10 @@ def _fmt(value: Any, digits: int = 3) -> str:
     return str(value)
 
 
-def render_intelligent_diagnosis(block: dict[str, Any]) -> str:
-    """Render the stages 1-7 intelligent diagnosis block as Markdown."""
+def render_diagnosis(block: dict[str, Any]) -> str:
+    """Render the unified stages 1-7 diagnosis block as Markdown."""
     lines: list[str] = []
-    lines.append("## 智能诊断（Stages 1-7）")
+    lines.append("## 诊断")
     lines.append("")
     lines.append(
         f"- taxonomy v{block.get('taxonomy_version', '?')} · probe registry "

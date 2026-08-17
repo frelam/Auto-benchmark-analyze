@@ -58,8 +58,9 @@ class CurvesConfig(BaseModel):
 class DiagnosisConfig(BaseModel):
     sample_size: int = 50
     taxonomy_path: str | None = None
-    # Intelligent diagnosis pipeline (design doc v2) thresholds.
-    intelligent: bool = False
+    # Unified intelligent diagnosis pipeline (design doc v2, stages 1-7)
+    # thresholds. Stages 1-7 always run; the per-stage guards below decide
+    # which evidence channels fire (e.g. coarse vs fine Stage 1, pass@k tests).
     min_items_per_capability: int = 8
     min_peers: int = 5
     min_passk_samples: int = 8
@@ -215,6 +216,12 @@ def load_config(path: str | Path | None = None) -> Settings:
 
     Returns:
         A validated :class:`Settings` instance.
+
+    Raises:
+        ValueError: if the merged config still carries the removed
+            ``diagnosis.intelligent`` flag (the diagnostic paths have been
+            merged — the stages 1-7 pipeline is now always on, so the flag is
+            no longer meaningful).
     """
     with open(_DEFAULT_CONFIG, encoding="utf-8") as fh:
         base = yaml.safe_load(fh) or {}
@@ -226,4 +233,13 @@ def load_config(path: str | Path | None = None) -> Settings:
         base = _deep_merge(base, user)
 
     base = _apply_env_overrides(base)
+
+    diagnosis_cfg = base.get("diagnosis") if isinstance(base, dict) else None
+    if isinstance(diagnosis_cfg, dict) and "intelligent" in diagnosis_cfg:
+        raise ValueError(
+            "config key 'diagnosis.intelligent' has been removed: the stages 1-7 "
+            "intelligent diagnosis pipeline is now always on. Drop this key from "
+            "your config (and the --intelligent flag from the CLI) to continue."
+        )
+
     return Settings.model_validate(base)

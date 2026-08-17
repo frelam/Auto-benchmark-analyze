@@ -1,10 +1,11 @@
 """Command-line interface for benchmark-diagnosis.
 
 Commands take input in exactly two forms — a YAML config (``--config``) or CLI
-arguments after the command. The ``run`` / ``diagnose`` commands both funnel
-through :mod:`benchmark_diagnosis.runner`, which auto-deploys model weights or
-reuses an inference endpoint, evaluates, analyzes, and writes report + metrics +
-figures in one shot.
+arguments after the command. The ``run`` command funnels through
+:mod:`benchmark_diagnosis.runner`, which auto-deploys model weights or reuses
+an inference endpoint, evaluates, diagnoses, and writes report + metrics +
+figures in one shot. Diagnosis always runs the unified stages 1-7 intelligent
+pipeline (preceded by a Stage 0 cluster-verdict aggregation).
 """
 
 from __future__ import annotations
@@ -279,7 +280,7 @@ def run(
         None, "--scores", help="JSON {benchmark_id: score} file; skip evaluation (source: scores).",
     ),
     mode: str = typer.Option(
-        None, "--mode", help="analyze (eval + analysis) or full (eval + analysis + recommendations).",
+        None, "--mode", help="analyze (analysis only) or full (analysis + recommendations).",
     ),
     advisor_mode: str = typer.Option(
         None, "--advisor-mode", help="auto | llm_rules | rules (default auto).",
@@ -290,17 +291,14 @@ def run(
     output: Path = typer.Option(
         None, "--output", help="Report output path (default: config run.output.dir/report.md).",
     ),
-    intelligent: bool = typer.Option(
-        None, "--intelligent/--no-intelligent",
-        help="Run the stages 1-7 intelligent diagnosis pipeline (design doc v2).",
-    ),
 ) -> None:
-    """One command: deploy or reuse an endpoint, evaluate, analyze, advise.
+    """One command: deploy or reuse an endpoint, evaluate, diagnose, advise.
 
     Exactly one model source must be provided — ``--model-id`` (auto-deploys via
     vLLM), ``--base-url`` (reuse an inference service), or ``--scores`` (a JSON
     scores file, no evaluation). Source, mode, and advisor can also come from a
-    YAML config via ``--config``.
+    YAML config via ``--config``. Diagnosis always runs the unified stages 1-7
+    intelligent pipeline; use ``--mode analyze`` to skip Stage 6 suggestions.
     """
     settings: Settings = ctx.obj
     result = _run_or_exit(
@@ -315,58 +313,6 @@ def run(
         params=params,
         release_date=release_date,
         output=output,
-        intelligent=intelligent,
-    )
-    _print_result(result)
-
-
-@app.command()
-def diagnose(
-    ctx: typer.Context,
-    model: str = typer.Option(
-        None, "--model", help="Model id (registered or new; defaults to config run.model.name).",
-    ),
-    base_url: str = typer.Option(
-        None, "--base-url", help="OpenAI-compatible endpoint to evaluate first.",
-    ),
-    scores: Path = typer.Option(
-        None, "--scores", help="JSON {benchmark_id: score} instead of evaluating.",
-    ),
-    mode: str = typer.Option(
-        None, "--mode", help="analyze (eval + analysis) or full (eval + analysis + recommendations).",
-    ),
-    advisor_mode: str = typer.Option(
-        None, "--advisor-mode", help="auto | llm_rules | rules (default auto).",
-    ),
-    arch: str = typer.Option(None, "--arch", help="dense|moe (for a new model)."),
-    params: float = typer.Option(None, "--params", help="Parameter count in billions."),
-    release_date: str = typer.Option(None, "--release-date", help="ISO date."),
-    output: Path = typer.Option(
-        None, "--output", help="Report output path (default: config run.output.dir/report.md).",
-    ),
-    intelligent: bool = typer.Option(
-        None, "--intelligent/--no-intelligent",
-        help="Run the stages 1-7 intelligent diagnosis pipeline (design doc v2).",
-    ),
-) -> None:
-    """Evaluate (optional) then diagnose and write a report + metrics + figures.
-
-    Delegate of ``run`` for the endpoint/scores sources — it never deploys
-    weights. Provide ``--base-url`` or ``--scores`` as the model source.
-    """
-    settings: Settings = ctx.obj
-    result = _run_or_exit(
-        settings,
-        model=model,
-        base_url=base_url,
-        scores=scores,
-        mode=mode,
-        advisor_mode=advisor_mode,
-        arch=arch,
-        params=params,
-        release_date=release_date,
-        output=output,
-        intelligent=intelligent,
     )
     _print_result(result)
 

@@ -1,7 +1,7 @@
 """End-to-end run orchestration: one command from model source to report.
 
-The runner is the single entry point behind the ``run`` / ``diagnose`` CLI
-commands. It owns the full lifecycle:
+The runner is the single entry point behind the ``run`` CLI command. It owns
+the full lifecycle:
 
 * ensure offline assets exist (ingest seed / build coverage + portfolio +
   curves);
@@ -12,8 +12,10 @@ commands. It owns the full lifecycle:
 * render charts, write ``metrics.json`` + a Markdown report;
 * tear down any server we launched.
 
-The subprocess boundaries (deploy, readiness probe, harness run) are dependency
-injectable so tests can drive the whole flow without vLLM or lm_eval installed.
+Diagnosis always runs the unified stages 1-7 intelligent pipeline (preceded by
+a Stage 0 cluster-verdict aggregation). The subprocess boundaries (deploy,
+readiness probe, harness run) are dependency injectable so tests can drive the
+whole flow without vLLM or lm_eval installed.
 """
 
 from __future__ import annotations
@@ -70,7 +72,6 @@ class RunRequest:
     release_date: str | None = None
     advisor_mode: str = "auto"
     output: Path | None = None
-    intelligent: bool = False
 
 
 @dataclass
@@ -99,7 +100,6 @@ def build_run_request(
     params: float | None = None,
     release_date: str | None = None,
     output: str | Path | None = None,
-    intelligent: bool | None = None,
 ) -> RunRequest:
     """Merge CLI arguments over the config's ``run`` profile into a run request.
 
@@ -120,8 +120,6 @@ def build_run_request(
             ``recommendation.advisor_mode``).
         arch / params / release_date: New-model metadata.
         output: Report output path (defaults to ``run.output.dir/report.md``).
-        intelligent: Enable the stages 1-7 intelligent diagnosis pipeline
-            (defaults to ``diagnosis.intelligent`` in settings).
 
     Returns:
         A fully-resolved :class:`RunRequest`.
@@ -212,9 +210,6 @@ def build_run_request(
         release_date=release_date or cfg.release_date,
         advisor_mode=advisor_mode or settings.recommendation.advisor_mode,
         output=Path(output) if output is not None else None,
-        intelligent=(
-            settings.diagnosis.intelligent if intelligent is None else intelligent
-        ),
     )
 
 
@@ -298,7 +293,6 @@ def execute_run(
             settings,
             mode=mode,
             advisor_mode=advisor_mode,
-            intelligent=request.intelligent,
         )
         report["scores"] = raw_scores
 

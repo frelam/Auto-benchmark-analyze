@@ -203,9 +203,12 @@ src/benchmark_diagnosis/intelligent_diagnosis/
   data/*.yaml               # capability_taxonomy / probe_registry / cost_table
 ```
 
-集成点：`pipeline.diagnose_model(..., intelligent=True)` 在现有簇诊断之后追加
-`report["intelligent_diagnosis"]`；CLI `run`/`diagnose` 增加 `--intelligent`；
-新增 `feedback log` / `feedback recalibrate` / `feedback list` 子命令。
+集成点：`pipeline.diagnose_model(...)` 现在是统一管线，Stage 0（簇级 verdict 聚合）
+之后直接跑 Stages 1-7 并把结果写入 `report["diagnosis"]`；CLI 单一 `run` 命令
+（`--mode analyze` 跳过 Stage 6 建议文案）；外加 `feedback log` /
+`feedback recalibrate` / `feedback list` 子命令。`diagnose` 命令、`--intelligent`
+flag 与 `diagnosis.intelligent` 配置项已合并移除（旧配置仍带 `diagnosis.intelligent`
+键时 `load_config` 会显式报错）。
 
 ## 11. 已知局限与演进（同 v1，+ 新增）
 

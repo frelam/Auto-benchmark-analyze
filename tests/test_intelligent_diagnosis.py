@@ -996,7 +996,7 @@ def test_orchestrator_end_to_end(seeded_db, registry, taxonomy) -> None:
     session.close()
 
 
-def test_pipeline_diagnose_model_intelligent(seeded_db) -> None:
+def test_pipeline_diagnose_model_unified(seeded_db) -> None:
     session, config = seeded_db
     model = next(m for m in queries.list_models(session) if m.total_params)
     matrix = queries.scores_matrix(session)
@@ -1014,9 +1014,8 @@ def test_pipeline_diagnose_model_intelligent(seeded_db) -> None:
         config,
         mode="full",
         advisor_mode="rules",
-        intelligent=True,
     )
-    block = report["intelligent_diagnosis"]
+    block = report["diagnosis"]
     assert block["candidates"]  # non-empty under-performing capability set
-    assert report["clusters"]  # legacy path still works
+    assert report["clusters"]  # Stage 0 cluster verdicts still render
     session.close()

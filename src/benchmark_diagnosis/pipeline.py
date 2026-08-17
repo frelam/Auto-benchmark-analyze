@@ -21,13 +21,8 @@ from benchmark_diagnosis.config import Settings, resolve_advisor_mode
 from benchmark_diagnosis.core import db
 from benchmark_diagnosis.core.llm_client import LLMClient
 from benchmark_diagnosis.core.schema import ModelRecord
-from benchmark_diagnosis.core.types import (
-    ClusterPortfolio,
-    DiagnosisResult,
-    ExpectationCurve,
-)
+from benchmark_diagnosis.core.types import ClusterPortfolio, ExpectationCurve
 from benchmark_diagnosis.data import queries
-from benchmark_diagnosis.diagnosis.failure_mode_analyst import classify_failures
 from benchmark_diagnosis.evaluation_orchestration.drilldown_trigger import (
     should_drilldown,
 )
@@ -36,13 +31,7 @@ from benchmark_diagnosis.evaluation_orchestration.expectation_curves import (
     judge,
 )
 from benchmark_diagnosis.evaluation_orchestration.screening_runner import cluster_scores
-from benchmark_diagnosis.recommendation import engine
-from benchmark_diagnosis.recommendation.capability_inference import (
-    infer_capability_deficit,
-)
 from benchmark_diagnosis.recommendation.experience_base import load_experience_base
-from benchmark_diagnosis.recommendation.retrieval import get_retriever
-from benchmark_diagnosis.recommendation.rule_base.loader import load_validated_rules
 from benchmark_diagnosis.representative_selection.portfolio_selector import (
     select_portfolios,
 )
@@ -232,27 +221,33 @@ def diagnose_model(
     cases: list[dict] | None = None,
     mode: str = "full",
     advisor_mode: str = "auto",
-    intelligent: bool = False,
 ) -> dict[str, Any]:
-    """Run the online diagnosis/recommendation chain and return a report dict.
+    """Run the unified diagnosis pipeline and return a report dict.
+
+    The pipeline is the stages 1-7 chain (design doc v2), preceded by a Stage 0
+    cluster-verdict aggregation that feeds per-benchmark verdicts into Stage 1.
+    Stages 1-7 degrade gracefully when their preconditions are absent (no probe
+    -> NO_PROBE list, no LLM -> deterministic Stage 6, no item tags -> coarse
+    Stage 1, no cases -> Stage 3 skipped).
 
     Args:
         session: DB session (offline assets must already exist).
         model: Target model (transient ModelRecord is fine; need arch/params/date).
         raw_scores: Mapping benchmark_id -> score for the evaluated model.
         config: Settings.
-        cases: Optional failed-case samples ({question, model_output, gold}) for
-            LLM-as-analyst classification. When None, failure modes are empty.
-        mode: ``"full"`` (analysis + recommendations) or ``"analyze"``
-            (analysis only; recommendations are omitted).
+        cases: Optional failed-case samples (``{question, model_output, gold}``)
+            for Stage 3 guided bad-case analysis. When None, case evidence empty.
+        mode: ``"full"`` (analysis + Stage 6 suggestions) or ``"analyze"``
+            (analysis only; Stage 6 suggestions are omitted).
         advisor_mode: Requested advisor mode (``auto``/``llm_rules``/``rules``),
             resolved against ``config`` via :func:`resolve_advisor_mode`.
-        intelligent: When True, also run the stages 1-7 intelligent diagnosis
-            pipeline (design doc v2) and attach ``intelligent_diagnosis`` to
-            the report.
+            ``rules`` disables the analyst LLM (Stage 3 + Stage 6 LLM skipped).
 
     Returns:
-        A structured report dict suitable for ``reporting.render_markdown``.
+        A structured report dict suitable for ``reporting.render_markdown``. The
+        ``clusters`` field carries Stage 0 per-cluster verdicts; the ``diagnosis``
+        field carries the unified stages 1-7 output (candidates, verdicts,
+        priorities, suggestions).
     """
     if mode not in ("analyze", "full"):
         raise ValueError(f"unknown mode {mode!r}; expected analyze|full")
@@ -260,66 +255,27 @@ def diagnose_model(
 
     portfolios = _revive_portfolios(db.load_latest_asset(session, "portfolio") or [])
     curves = _revive_curves(db.load_latest_asset(session, "curves") or [])
-    coverage = db.load_latest_asset(session, "coverage") or []
-    experience_base = load_experience_base(
-        session, config.recommendation.experience_path
-    )
     coverage_version = _latest_version(session, "coverage")
     portfolio_version = _latest_version(session, "portfolio")
     curves_version = _latest_version(session, "curves")
     experience_version = _latest_version(session, "experience")
 
-    taxonomy, rules = load_validated_rules()
     llm = None if advisor_mode == "rules" else _make_analyst_llm(config)
-    benchmark_tags = {
-        b.benchmark_id: (b.declared_tags or []) for b in queries.list_benchmarks(session)
-    }
-
     c_scores = cluster_scores(raw_scores, portfolios)
 
+    # ---- Stage 0: per-cluster verdict aggregation (also feeds Stage 1) ----
     clusters: list[dict] = []
+    per_benchmark_verdicts: dict[str, dict] = {}
     for pf in portfolios:
         verdict = _judge_cluster(model, pf, raw_scores, curves, config)
         if verdict is None:
             continue
-
-        diagnosis = DiagnosisResult(
-            cluster_id=pf.cluster_id,
-            sub_capability=_lowest_benchmark(pf, raw_scores),
-            failure_modes={},
-            quantified_gap=verdict.get("quantified_gap"),
-        )
-        if verdict["underperforming"] and cases and llm is not None:
-            diagnosis.failure_modes = classify_failures(
-                llm, taxonomy, cases, sample_size=config.diagnosis.sample_size
-            )
-
-        # Capability-deficit inference: benchmark correlation (coverage) +
-        # bad-case evidence (failure modes) -> which capabilities are missing.
-        deficit = infer_capability_deficit(
-            coverage,
-            verdict["benchmarks"],
-            diagnosis.failure_modes,
-            experience_base.failure_mode_capability_map,
-        )
-        diagnosis.capability_deficit = deficit.strengths
-        diagnosis.deficit_narrative = deficit.narrative
-
-        recs = []
-        if mode == "full":
-            rec_tags = _rec_tags(diagnosis, benchmark_tags)
-            retrieved = get_retriever(config.recommendation).retrieve(
-                ",".join(rec_tags), config.recommendation.max_external_sources
-            )
-            recs = engine.recommend(
-                diagnosis,
-                experience_base,
-                config.recommendation,
-                llm,
-                rules=rules,
-                benchmark_tags=benchmark_tags,
-                retrieved=retrieved,
-            )
+        for b in pf.benchmarks:
+            bid = b["benchmark_id"]
+            if bid in raw_scores and bid not in per_benchmark_verdicts:
+                per_benchmark_verdicts[bid] = judge(
+                    model, bid, raw_scores[bid], curves, config.curves
+                )
         clusters.append(
             {
                 "cluster_id": pf.cluster_id,
@@ -329,17 +285,29 @@ def diagnose_model(
                 "underperforming": verdict["underperforming"],
                 "benchmarks": verdict["benchmarks"],
                 "diagnosis": {
-                    "sub_capability": diagnosis.sub_capability,
-                    "failure_modes": diagnosis.failure_modes,
-                    "quantified_gap": diagnosis.quantified_gap,
-                    "capability_deficit": deficit.strengths,
-                    "deficit_narrative": deficit.narrative,
+                    "sub_capability": _lowest_benchmark(pf, raw_scores),
+                    "quantified_gap": verdict.get("quantified_gap"),
                 },
-                "recommendations": [_jsonable(r) for r in recs],
             }
         )
 
-    report: dict[str, Any] = {
+    # ---- Stages 1-7: unified intelligent diagnosis ----
+    from benchmark_diagnosis.intelligent_diagnosis.orchestrator import (
+        run_intelligent_diagnosis,
+    )
+
+    diagnosis_block = run_intelligent_diagnosis(
+        session=session,
+        verdict_benchmarks=list(per_benchmark_verdicts.values()),
+        model=model,
+        raw_scores=raw_scores,
+        config=config,
+        llm=llm,
+        cases=cases,
+        mode=mode,
+    )
+
+    return {
         "model": {
             "model_id": model.model_id,
             "name": model.name,
@@ -358,63 +326,8 @@ def diagnose_model(
             "experience_version": experience_version,
         },
         "clusters": clusters,
+        "diagnosis": diagnosis_block,
     }
-
-    if intelligent:
-        report["intelligent_diagnosis"] = _run_intelligent_block(
-            session, model, raw_scores, config, llm=llm, cases=cases, mode=mode
-        )
-    return report
-
-
-def _run_intelligent_block(
-    session: Session,
-    model: ModelRecord,
-    raw_scores: dict[str, float],
-    config: Settings,
-    *,
-    llm: LLMClient | None,
-    cases: list[dict] | None,
-    mode: str,
-) -> dict[str, Any]:
-    """Run stages 1-7 on every below-expectation benchmark verdict."""
-    from benchmark_diagnosis.intelligent_diagnosis.orchestrator import (
-        run_intelligent_diagnosis,
-    )
-
-    portfolios = _revive_portfolios(db.load_latest_asset(session, "portfolio") or [])
-    curves = _revive_curves(db.load_latest_asset(session, "curves") or [])
-    verdicts: dict[str, dict] = {}
-    for pf in portfolios:
-        for b in pf.benchmarks:
-            bid = b["benchmark_id"]
-            if bid not in raw_scores or bid in verdicts:
-                continue
-            verdicts[bid] = judge(model, bid, raw_scores[bid], curves, config.curves)
-    return run_intelligent_diagnosis(
-        session=session,
-        verdict_benchmarks=list(verdicts.values()),
-        model=model,
-        raw_scores=raw_scores,
-        config=config,
-        llm=llm,
-        cases=cases,
-        mode=mode,
-    )
-
-
-def _rec_tags(
-    diagnosis: DiagnosisResult, benchmark_tags: dict[str, list[str]] | None
-) -> list[str]:
-    """Tags driving retrieval for a cluster (mirrors the engine's tag order)."""
-    tags = list(diagnosis.capability_deficit.keys())
-    if not tags:
-        tags = list(diagnosis.failure_modes.keys())
-    if not tags and diagnosis.sub_capability:
-        tags = list((benchmark_tags or {}).get(diagnosis.sub_capability) or [])
-    if not tags and diagnosis.sub_capability:
-        tags = [diagnosis.sub_capability]
-    return tags
 
 
 def _lowest_benchmark(

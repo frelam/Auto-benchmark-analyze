@@ -42,11 +42,12 @@ diagnosis:
   sample_size: 50              # failed cases sampled per low sub-capability
   taxonomy_path: null          # null => packaged taxonomy
 
-  # Intelligent diagnosis pipeline (design doc v2). Opt-in via
-  # `--intelligent` / this flag: Stage 1 candidate generation -> Stage 2 probe
-  # verification -> Stage 3 guided bad-case analysis -> Stage 4 confidence
-  # fusion -> Stage 5 priority scoring -> Stage 6 suggestion write-up.
-  intelligent: false
+  # Unified intelligent diagnosis pipeline (design doc v2, stages 1-7). Always
+  # on: Stage 1 candidate generation -> Stage 2 probe verification -> Stage 3
+  # guided bad-case analysis -> Stage 4 confidence fusion -> Stage 5 priority
+  # scoring -> Stage 6 suggestion write-up -> Stage 7 feedback recycling. Use
+  # `run --mode analyze` to skip Stage 6 suggestions; the per-stage guards below
+  # decide which evidence channels fire (coarse vs fine Stage 1, pass@k tests).
   min_items_per_capability: 8  # item-level screening statistical guard
   min_peers: 5                 # minimum historical peers for percentile judgment
   min_passk_samples: 8         # minimum samples before pass@k gap is trusted

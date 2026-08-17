@@ -55,7 +55,7 @@ def test_build_offline_and_diagnose(seeded_session):
     assert len(report["clusters"]) >= 1
     for cluster in report["clusters"]:
         assert "percentile" in cluster and "underperforming" in cluster
-        assert "recommendations" in cluster
+        assert "diagnosis" in cluster
 
 
 def test_diagnose_analyze_mode_skips_recommendations(seeded_session):
@@ -74,8 +74,11 @@ def test_diagnose_analyze_mode_skips_recommendations(seeded_session):
     assert report["mode"] == "analyze"
     assert report["advisor_mode"] == "rules"  # no analyst LLM configured
     assert report["clusters"]
+    assert "diagnosis" in report
+    # analyze mode skips Stage 6 suggestions: training/non-training lists empty.
+    suggestions = (report["diagnosis"].get("suggestions") or {})
+    assert (suggestions.get("training") or []) == []
     for cluster in report["clusters"]:
-        assert cluster["recommendations"] == []
         assert "quantified_gap" in cluster["diagnosis"]
 
 

@@ -1,4 +1,4 @@
-"""Tests for the end-to-end runner (unified ``run`` / ``diagnose`` path)."""
+"""Tests for the end-to-end runner (unified ``run`` path)."""
 
 from __future__ import annotations
 
@@ -117,8 +117,9 @@ def test_execute_run_analyze_mode_skips_recommendations(run_env):
     result = execute_run(settings, request, deploy_weights=_NoServer)
     assert result.report["mode"] == "analyze"
     assert result.report["clusters"]
-    for cluster in result.report["clusters"]:
-        assert cluster["recommendations"] == []
+    # analyze mode skips Stage 6 suggestions: training list empty.
+    suggestions = (result.report["diagnosis"].get("suggestions") or {})
+    assert (suggestions.get("training") or []) == []
 
 
 def test_execute_run_weights_path_deploys_and_tears_down(run_env, monkeypatch):
