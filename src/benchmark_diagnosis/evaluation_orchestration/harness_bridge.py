@@ -26,6 +26,11 @@ def build_command(
     output_dir: str | Path | None = None,
     log_samples: bool = True,
     harness_cmd: str = "lm_eval",
+    tokenizer: str | None = None,
+    max_gen_toks: int | None = None,
+    num_concurrent: int | None = None,
+    max_length: int | None = None,
+    confirm_run_unsafe_code: bool = False,
 ) -> list[str]:
     """Build the lm-evaluation-harness CLI argv for one evaluation run.
 
@@ -45,13 +50,32 @@ def build_command(
         output_dir: Directory the harness writes ``results.json`` into.
         log_samples: Append ``--log_samples`` so per-example results are emitted.
         harness_cmd: The harness entrypoint (default ``"lm_eval"``).
+        tokenizer: Local HF tokenizer path / id for the ``local-completions``
+            model type (the harness otherwise loads a tokenizer named after the
+            served model id, which fails for locally-served models).
+        max_gen_toks: Max generation tokens for generative tasks (the harness
+            default of 256 truncates CoT answers on math-style benchmarks).
 
     Returns:
         The full argv list ready for :func:`subprocess.run`.
     """
     if base_url is not None:
         model_type = "local-completions"
-        model_args = f"model={model},base_url={base_url}"
+        # lm-eval 0.4.12's local-completions model type POSTs the payload
+        # directly to ``base_url`` (no path appended), so pass the full
+        # completions endpoint even though the CLI convention is a /v1 root.
+        api_base = base_url.rstrip("/")
+        if not api_base.endswith("/completions"):
+            api_base += "/completions"
+        model_args = f"model={model},base_url={api_base}"
+        if tokenizer:
+            model_args += f",tokenizer={tokenizer}"
+        if max_gen_toks:
+            model_args += f",max_gen_toks={max_gen_toks}"
+        if num_concurrent:
+            model_args += f",num_concurrent={num_concurrent}"
+        if max_length:
+            model_args += f",max_length={max_length}"
     else:
         model_type = "hf"
         model_args = f"pretrained={model}"
@@ -65,6 +89,8 @@ def build_command(
         "--tasks",
         ",".join(tasks),
     ]
+    if confirm_run_unsafe_code:
+        cmd.append("--confirm_run_unsafe_code")
     if log_samples:
         cmd.append("--log_samples")
     if num_fewshot is not None:
@@ -115,6 +141,11 @@ def run_eval(cmd: list[str], *, cwd: str | Path | None = None) -> dict:
 def parse_results(path: str | Path) -> dict:
     """Load a harness ``results.json`` file into a dict.
 
+    lm-eval >= 0.4.12 writes results into a per-model subdirectory
+    (``<output_dir>/<model>/results_<timestamp>.json``) instead of
+    ``<output_dir>/results.json``; when the direct file is missing we fall
+    back to the newest ``results_*.json`` anywhere under the output dir.
+
     Args:
         path: Path to a ``results.json`` produced by lm-evaluation-harness.
 
@@ -124,7 +155,12 @@ def parse_results(path: str | Path) -> dict:
     """
     p = Path(path)
     if not p.exists():
-        return {}
+        candidates = sorted(
+            p.parent.glob("*/results_*.json"), key=lambda f: f.stat().st_mtime
+        )
+        if not candidates:
+            return {}
+        p = candidates[-1]
     try:
         return json.loads(p.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):

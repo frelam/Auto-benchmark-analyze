@@ -115,6 +115,22 @@ def build_offline(session: Session, config: Settings) -> dict[str, str]:
         session, "coverage", _jsonable(coverage), note="capability coverage table"
     )
 
+    # Portfolio selection only considers benchmarks this environment can
+    # actually evaluate (lm-eval 0.4.12 task availability), so the
+    # representative combos never reference unrunnable tasks.
+    from benchmark_diagnosis.evaluation_orchestration.task_registry import (
+        is_evaluable,
+    )
+
+    skipped = sorted(
+        {c.benchmark_id for c in coverage if not is_evaluable(c.benchmark_id)}
+    )
+    if skipped:
+        print(
+            f"[yellow]Skipping {len(skipped)} benchmark(s) with no lm-eval task "
+            f"in this environment: {skipped}[/]"
+        )
+    coverage = [c for c in coverage if is_evaluable(c.benchmark_id)]
     portfolios = select_portfolios(coverage) if coverage else []
     portfolio_version = db.save_asset(session, "portfolio", _jsonable(portfolios))
 

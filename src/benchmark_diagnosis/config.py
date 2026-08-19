@@ -37,6 +37,25 @@ class EvaluationConfig(BaseModel):
     batch_size: str = "auto"
     limit: int | None = None
     output_dir: str = "data/eval_runs"
+    # Local HF tokenizer path (or HF id) used by the harness when talking to an
+    # OpenAI-compatible endpoint (local-completions model type). Without it the
+    # harness tries to load a tokenizer named after the served model id, which
+    # fails for locally-served models.
+    tokenizer: str | None = None
+    # Max generation tokens for generative tasks (CoT benchmarks like math /
+    # gsm8k often need more than the harness default of 256).
+    max_gen_toks: int = 1024
+    # Concurrent API requests against the endpoint (harness default is 1 —
+    # too slow for thousands of samples on big benchmarks).
+    num_concurrent: int = 16
+    # Max input context length (tokens) for harness requests. Long-context
+    # benchmarks (longbench_v2) need this raised well above the harness
+    # default of 2048; the served model's context length is the upper bound.
+    max_length: int = 2048
+    # lm-eval >= 0.4.12 refuses code-execution tasks (humaneval) unless the
+    # CLI flag --confirm_run_unsafe_code is passed (in addition to the
+    # HF_ALLOW_CODE_EVAL=1 env var for the code_eval metric).
+    confirm_run_unsafe_code: bool = False
 
 
 class ServingConfig(BaseModel):

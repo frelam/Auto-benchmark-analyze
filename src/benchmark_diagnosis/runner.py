@@ -37,7 +37,7 @@ from sqlalchemy.orm import Session
 from benchmark_diagnosis.config import Settings, resolve_advisor_mode
 from benchmark_diagnosis.core import db
 from benchmark_diagnosis.core.schema import ModelRecord
-from benchmark_diagnosis.data import ingestion
+from benchmark_diagnosis.data import ingestion, queries
 from benchmark_diagnosis.evaluation_orchestration.deploy import (
     serve_command,
     wait_until_ready,
@@ -344,7 +344,16 @@ def execute_run(
                         f"override.[/]"
                     )
 
-        raw_scores = _collect_scores(request, base_url, portfolio_ids, run_harness, settings)
+        raw_scores = _collect_scores(
+            request,
+            base_url,
+            portfolio_ids,
+            run_harness,
+            settings,
+            known_benchmarks={
+                b.benchmark_id for b in queries.list_benchmarks(session)
+            },
+        )
 
         if raw_scores and not (portfolio_ids & set(raw_scores)):
             console.print(
@@ -519,6 +528,8 @@ def _collect_scores(
     portfolio_ids: set[str],
     run_harness: Callable[[list[str]], dict[str, Any]],
     settings: Settings,
+    *,
+    known_benchmarks: set[str] | None = None,
 ) -> dict[str, float]:
     """Load scores from a file, or evaluate the portfolio and flatten the results."""
     if request.source == "scores":
@@ -551,13 +562,34 @@ def _collect_scores(
         limit=settings.evaluation.limit,
         output_dir=Path(settings.evaluation.output_dir),
         harness_cmd=settings.evaluation.harness_cmd,
+        tokenizer=settings.evaluation.tokenizer,
+        max_gen_toks=settings.evaluation.max_gen_toks,
+        num_concurrent=settings.evaluation.num_concurrent,
+        max_length=settings.evaluation.max_length,
+        confirm_run_unsafe_code=settings.evaluation.confirm_run_unsafe_code,
     )
     if request.benchmarks:
         console.print(f"[cyan]Evaluating {len(tasks)} benchmark(s)[/] (subset: {','.join(tasks)})")
     else:
         console.print(f"[cyan]Evaluating {len(tasks)} benchmark(s)[/] (full portfolio)")
     console.print("[dim]  " + " ".join(cmd) + "[/]")
-    raw_scores = extract_scores(run_harness(cmd))
+    from benchmark_diagnosis.evaluation_orchestration.task_registry import (
+        to_benchmark_id,
+    )
+
+    # Keep only scores for known benchmark ids (registered benchmarks ∪
+    # requested subset): group tasks like `longbench2` / `mmmlu` expand into
+    # many subtask entries in results.json which would otherwise pollute the
+    # report. When no registered benchmarks are known (e.g. an unseeded DB),
+    # keep everything so scores are never silently dropped.
+    known_ids = set(known_benchmarks or set())
+    if request.benchmarks:
+        known_ids |= set(request.benchmarks)
+    raw_scores = {
+        to_benchmark_id(task): score
+        for task, score in extract_scores(run_harness(cmd)).items()
+        if not known_ids or to_benchmark_id(task) in known_ids
+    }
     _print_scores(raw_scores)
     return raw_scores
 
@@ -567,21 +599,42 @@ def _resolve_eval_tasks(
 ) -> list[str]:
     """Pick the evaluation task list, honoring an optional benchmark subset.
 
+    Benchmark ids are translated to lm-eval task names via the task registry
+    (some seed ids were renamed/moved in the pinned harness version);
+    benchmarks with no evaluable task are skipped with a warning instead of
+    failing the run.
+
     With ``benchmarks=None`` the full representative portfolio is evaluated.
     With a subset, the intersection is evaluated and any requested ids not in
     the portfolio are reported (they are still evaluated — the harness knows the
     task — but they will not feed the cluster analysis downstream).
     """
+    from benchmark_diagnosis.evaluation_orchestration.task_registry import (
+        to_lm_eval_task,
+    )
+
     if not benchmarks:
-        return sorted(portfolio_ids)
-    off = [b for b in benchmarks if b not in portfolio_ids]
-    if off:
-        console.print(
-            f"[yellow]Warning: {len(off)} of {len(benchmarks)} requested "
-            f"benchmark(s) are not in the representative portfolio and will be "
-            f"evaluated but excluded from cluster analysis: {off}[/]"
-        )
-    return sorted(benchmarks)
+        candidates = sorted(portfolio_ids)
+    else:
+        candidates = sorted(set(benchmarks))
+        off = [b for b in candidates if b not in portfolio_ids]
+        if off:
+            console.print(
+                f"[yellow]Warning: {len(off)} of {len(benchmarks)} requested "
+                f"benchmark(s) are not in the representative portfolio and will be "
+                f"evaluated but excluded from cluster analysis: {off}[/]"
+            )
+    tasks: list[str] = []
+    for bid in candidates:
+        task = to_lm_eval_task(bid)
+        if task is None:
+            console.print(
+                f"[yellow]Skipping {bid}: no lm-eval task available in this "
+                f"environment.[/]"
+            )
+        else:
+            tasks.append(task)
+    return tasks
 
 
 def _render_figures(

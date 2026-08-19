@@ -282,11 +282,13 @@ def test_execute_run_benchmarks_subset_limits_eval_tasks(run_env):
         wait_ready=lambda _: True,
         run_harness=fake_harness,
     )
-    # Only the requested subset is sent to the harness.
+    # Only the requested subset is sent to the harness, translated to lm-eval
+    # task names via the task registry; benchmarks without an evaluable task
+    # (swe_bench in this pinned harness) are skipped with a warning.
     assert len(captured) == 1
     tasks_idx = captured[0].index("--tasks") + 1
     tasks = captured[0][tasks_idx].split(",")
-    assert set(tasks) == {"mmlu_pro", "math", "swe_bench"}
+    assert set(tasks) == {"mmlu_pro", "hendrycks_math"}
 
 
 def test_execute_run_fails_fast_on_forced_llm_without_model(run_env):

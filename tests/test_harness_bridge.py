@@ -20,10 +20,38 @@ from benchmark_diagnosis.evaluation_orchestration.harness_bridge import (
 def test_build_command_local_completions_path():
     cmd = build_command("my-model", ["arc_easy", "mmlu"], base_url="http://x:8000/v1")
     assert cmd[:3] == ["lm_eval", "--model", "local-completions"]
+    # lm-eval 0.4.12 POSTs directly to base_url, so the bridge normalizes a
+    # /v1 root to the full completions endpoint.
     assert cmd[cmd.index("--model_args") + 1] == (
-        "model=my-model,base_url=http://x:8000/v1"
+        "model=my-model,base_url=http://x:8000/v1/completions"
     )
     assert cmd[cmd.index("--tasks") + 1] == "arc_easy,mmlu"
+
+
+def test_build_command_local_completions_keeps_full_url():
+    cmd = build_command("m", ["t"], base_url="http://x:8000/v1/completions")
+    assert "base_url=http://x:8000/v1/completions" in cmd[
+        cmd.index("--model_args") + 1
+    ]
+
+
+def test_build_command_local_completions_extra_args():
+    cmd = build_command(
+        "m",
+        ["t"],
+        base_url="http://x:8000/v1",
+        tokenizer="/models/m",
+        max_gen_toks=1024,
+        num_concurrent=16,
+        max_length=32768,
+        confirm_run_unsafe_code=True,
+    )
+    args = cmd[cmd.index("--model_args") + 1]
+    assert "tokenizer=/models/m" in args
+    assert "max_gen_toks=1024" in args
+    assert "num_concurrent=16" in args
+    assert "max_length=32768" in args
+    assert "--confirm_run_unsafe_code" in cmd
 
 
 def test_build_command_hf_path():
@@ -67,6 +95,16 @@ def test_build_command_custom_harness_cmd():
 
 def test_parse_results_missing_returns_empty(tmp_path):
     assert parse_results(tmp_path / "nope.json") == {}
+
+
+def test_parse_results_falls_back_to_model_subdir(tmp_path):
+    # lm-eval >= 0.4.12 writes <output_dir>/<model>/results_<ts>.json
+    sub = tmp_path / "model-id"
+    sub.mkdir()
+    (sub / "results_2026-01-01T00-00-00.000000.json").write_text(
+        json.dumps({"results": {"t": {"acc,none": 0.9}}}), encoding="utf-8"
+    )
+    assert parse_results(tmp_path / "results.json")["results"]["t"]["acc,none"] == 0.9
 
 
 def test_parse_results_roundtrip(tmp_path):

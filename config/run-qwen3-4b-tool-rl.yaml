@@ -1,0 +1,45 @@
+# Run config for evaluating Qwen3-4B-tool-rl via the Auto-benchmark-analyze tool.
+# Model served by SGLang at :30000 (V100 TP2, context 32768).
+# Diagnosis uses the deterministic rules advisor (no analyst LLM configured).
+
+storage:
+  db_path: data/benchmark_diagnosis.db
+  data_dir: data
+
+evaluation:
+  harness_cmd: /root/Auto-benchmark-analyze/.venv/bin/lm_eval   # venv copy, not the system one on PATH
+  num_fewshot: null            # use each benchmark's registered default
+  batch_size: auto
+  limit: null                  # full evaluation (no cap)
+  output_dir: data/eval_runs
+  tokenizer: /root/models/Qwen3-4B-tool-rl
+  max_gen_toks: 1024
+  num_concurrent: 16
+  max_length: 32768            # longbench_v2 needs long context; served ctx is 32768
+  confirm_run_unsafe_code: true  # humaneval executes generated code
+
+recommendation:
+  advisor_mode: rules          # deterministic experience-base engine
+
+run:
+  mode: full                   # evaluate + diagnose + recommend
+  model:
+    name: Qwen3-4B-tool-rl
+    source: endpoint
+    base_url: http://127.0.0.1:30000/v1
+    # Portfolio (evaluable subset) + extra cross-check benchmarks:
+    benchmarks:
+      - aime24
+      - ifeval
+      - longbench_v2
+      - math
+      - mmlu
+      - mmlu_pro
+      - gsm8k
+      - bbh
+      - humaneval
+    arch: dense
+    params: 4.0
+    release_date: "2026-08-18"
+  output:
+    dir: data/run_output
