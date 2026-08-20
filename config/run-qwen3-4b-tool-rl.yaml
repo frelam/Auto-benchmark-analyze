@@ -13,9 +13,10 @@ evaluation:
   limit: null                  # full evaluation (no cap)
   output_dir: data/eval_runs
   tokenizer: /root/models/Qwen3-4B-tool-rl
-  max_gen_toks: 1024
+  max_gen_toks: 16384      # 长思考+长输出 (8192 实测被打满: humaneval 8319 tokens 截断)
   num_concurrent: 16
   max_length: 32768            # longbench_v2 needs long context; served ctx is 32768
+  timeout: 7200             # 覆盖 16384 tokens 最坏生成 (~4819s @ 3.4 tok/s)
   confirm_run_unsafe_code: true  # humaneval executes generated code
 
 recommendation:
