@@ -154,24 +154,50 @@ def test_run_eval_success_loads_results(tmp_path, monkeypatch):
     out_dir.mkdir()
     cmd = build_command("m", ["t"], base_url="http://x", output_dir=out_dir)
 
-    def fake_run(argv, **kwargs):
-        (out_dir / "results.json").write_text(
-            json.dumps({"results": {"t": {"acc,none": 0.5}}}), encoding="utf-8"
-        )
-        return SimpleNamespace(returncode=0)
+    class FakePopen:
+        def __init__(self, argv, **kwargs):
+            (out_dir / "results.json").write_text(
+                json.dumps({"results": {"t": {"acc,none": 0.5}}}), encoding="utf-8"
+            )
+            self.stdout = ["task t: done\n"]
 
-    monkeypatch.setattr(harness_bridge.subprocess, "run", fake_run)
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr(harness_bridge.subprocess, "Popen", FakePopen)
     result = run_eval(cmd, cwd=tmp_path)
     assert result["results"]["t"]["acc,none"] == 0.5
+
+
+def test_run_eval_streams_output_to_stdout(tmp_path, monkeypatch, capsys):
+    cmd = build_command("m", ["t"], base_url="http://x", output_dir=tmp_path)
+
+    class FakePopen:
+        def __init__(self, argv, **kwargs):
+            self.stdout = ["Building contexts for t...\n", "Requesting API: 50%|\n"]
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr(harness_bridge.subprocess, "Popen", FakePopen)
+    run_eval(cmd, cwd=tmp_path)
+    out = capsys.readouterr().out
+    # lm-eval progress lines must reach the caller live (no capture until exit)
+    assert "Building contexts for t..." in out
+    assert "Requesting API: 50%|" in out
 
 
 def test_run_eval_no_output_path_returns_empty(monkeypatch):
     cmd = build_command("m", ["t"], base_url="http://x")
 
-    def fake_run(argv, **kwargs):
-        return SimpleNamespace(returncode=0)
+    class FakePopen:
+        def __init__(self, argv, **kwargs):
+            self.stdout = []
 
-    monkeypatch.setattr(harness_bridge.subprocess, "run", fake_run)
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr(harness_bridge.subprocess, "Popen", FakePopen)
     assert run_eval(cmd) == {}
 
 
@@ -196,11 +222,26 @@ def test_extract_scores_empty_results():
 def test_run_eval_failure_raises_runtime_error(monkeypatch):
     cmd = build_command("m", ["t"], base_url="http://x")
 
-    def fake_run(argv, **kwargs):
-        raise subprocess.CalledProcessError(
-            returncode=1, cmd=argv, stderr="cuda out of memory\n"
-        )
+    class FakePopen:
+        def __init__(self, argv, **kwargs):
+            self.stdout = ["loading task t...\n", "cuda out of memory\n"]
 
-    monkeypatch.setattr(harness_bridge.subprocess, "run", fake_run)
+        def wait(self):
+            return 1
+
+    monkeypatch.setattr(harness_bridge.subprocess, "Popen", FakePopen)
     with pytest.raises(RuntimeError, match="cuda out of memory"):
         run_eval(cmd)
+
+
+def test_build_command_timeout_passthrough():
+    cmd = build_command("m", ["t"], base_url="http://x", timeout=3600)
+    args = cmd[cmd.index("--model_args") + 1]
+    # V100 fix: lm-eval's default 300s aiohttp timeout kills long generations
+    assert ",timeout=3600" in args
+
+
+def test_build_command_timeout_omitted_when_none():
+    cmd = build_command("m", ["t"], base_url="http://x")
+    args = cmd[cmd.index("--model_args") + 1]
+    assert "timeout=" not in args

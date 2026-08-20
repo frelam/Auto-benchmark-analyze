@@ -52,6 +52,14 @@ class EvaluationConfig(BaseModel):
     # benchmarks (longbench_v2) need this raised well above the harness
     # default of 2048; the served model's context length is the upper bound.
     max_length: int = 2048
+    # Per-request HTTP timeout (seconds) for the harness client. lm-eval's
+    # default is 300s, which is too short on slow hardware (e.g. V100 with
+    # torch_native eager decode + num_concurrent=16: ~3.4 tok/s per request,
+    # so an 8192-token generation takes ~2400s) — requests then die with
+    # aiohttp TimeoutError, tenacity retries exhaust, and the whole eval
+    # collapses with "Connector is closed". Must exceed the worst-case
+    # generation time: max_gen_toks / slowest-per-request-throughput.
+    timeout: int = 3600
     # lm-eval >= 0.4.12 refuses code-execution tasks (humaneval) unless the
     # CLI flag --confirm_run_unsafe_code is passed (in addition to the
     # HF_ALLOW_CODE_EVAL=1 env var for the code_eval metric).

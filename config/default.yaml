@@ -26,6 +26,8 @@ evaluation:
   max_gen_toks: 1024        # max generation tokens for generative tasks
   num_concurrent: 16        # concurrent API requests (harness default 1 is slow)
   max_length: 2048          # max input context tokens (raise for long-context benchmarks)
+  timeout: 3600             # per-request HTTP timeout (s); lm-eval default 300 is too
+                            # short for V100 slow decode (16-concurrent ~3.4 tok/s/req)
   confirm_run_unsafe_code: false  # allow code-execution tasks like humaneval
   apply_chat_template: false      # wrap prompts in the tokenizer chat template
                                   # (chat/RL models degrade on bare prompts)

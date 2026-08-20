@@ -265,6 +265,7 @@ def eval_model(
         output_dir=output_dir,
         harness_cmd=settings.evaluation.harness_cmd,
         apply_chat_template=settings.evaluation.apply_chat_template,
+        timeout=settings.evaluation.timeout,
     )
     console.print("[cyan]Running:[/] " + " ".join(cmd))
     results = run_eval(cmd)

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
+from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +32,7 @@ def build_command(
     max_gen_toks: int | None = None,
     num_concurrent: int | None = None,
     max_length: int | None = None,
+    timeout: int | None = None,
     confirm_run_unsafe_code: bool = False,
     apply_chat_template: bool = False,
 ) -> list[str]:
@@ -96,6 +99,14 @@ def build_command(
             model_args += f",num_concurrent={num_concurrent}"
         if max_length:
             model_args += f",max_length={max_length}"
+        if timeout:
+            # lm-eval's aiohttp ClientTimeout default is 300s — far too short
+            # for slow endpoints (V100 eager decode at ~3.4 tok/s/request
+            # under 16-way concurrency: an 8192-token generation needs
+            # ~2400s). Without a raised timeout, requests die with
+            # TimeoutError, tenacity retries exhaust, and every other
+            # in-flight request collapses with "Connector is closed".
+            model_args += f",timeout={timeout}"
     else:
         model_type = "hf"
         model_args = f"pretrained={model}"
@@ -135,6 +146,11 @@ def build_command(
 def run_eval(cmd: list[str], *, cwd: str | Path | None = None) -> dict:
     """Run the harness command and load its ``results.json``.
 
+    The harness output is streamed to stdout live — lm-eval's per-task
+    INFO logs and "Requesting API" progress bars reach the caller instead
+    of being hidden until the process exits (long evals otherwise look
+    frozen). A bounded output tail is kept for the error report.
+
     Args:
         cmd: argv produced by :func:`build_command`.
         cwd: Working directory for the subprocess (e.g. the repo root).
@@ -144,21 +160,27 @@ def run_eval(cmd: list[str], *, cwd: str | Path | None = None) -> dict:
         or the results file is missing.
 
     Raises:
-        RuntimeError: if the subprocess exits non-zero (stderr tail attached).
+        RuntimeError: if the subprocess exits non-zero (output tail attached).
     """
-    try:
-        subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            cwd=str(cwd) if cwd is not None else None,
-            check=True,
-        )
-    except subprocess.CalledProcessError as exc:
-        tail = (exc.stderr or exc.stdout or "").strip()
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        cwd=str(cwd) if cwd is not None else None,
+    )
+    assert proc.stdout is not None
+    tail: deque[str] = deque(maxlen=200)  # bounded tail for the error report
+    for line in proc.stdout:
+        sys.stdout.write(line)
+        sys.stdout.flush()
+        tail.append(line)
+    rc = proc.wait()
+    if rc != 0:
+        tail_text = "".join(tail).strip()
         raise RuntimeError(
-            f"evaluation failed (exit {exc.returncode}): {tail[-2000:]}"
-        ) from exc
+            f"evaluation failed (exit {rc}): {tail_text[-2000:]}"
+        )
 
     output_dir = _output_dir_from_cmd(cmd)
     if output_dir is None:

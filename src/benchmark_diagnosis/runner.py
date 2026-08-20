@@ -566,6 +566,7 @@ def _collect_scores(
         max_gen_toks=settings.evaluation.max_gen_toks,
         num_concurrent=settings.evaluation.num_concurrent,
         max_length=settings.evaluation.max_length,
+        timeout=settings.evaluation.timeout,
         confirm_run_unsafe_code=settings.evaluation.confirm_run_unsafe_code,
         apply_chat_template=settings.evaluation.apply_chat_template,
     )
