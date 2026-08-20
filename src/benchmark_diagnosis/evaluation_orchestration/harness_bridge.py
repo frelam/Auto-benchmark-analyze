@@ -31,6 +31,7 @@ def build_command(
     num_concurrent: int | None = None,
     max_length: int | None = None,
     confirm_run_unsafe_code: bool = False,
+    apply_chat_template: bool = False,
 ) -> list[str]:
     """Build the lm-evaluation-harness CLI argv for one evaluation run.
 
@@ -39,22 +40,36 @@ def build_command(
     inference IP); without one, ``model`` is treated as a HuggingFace id and the
     ``hf`` model type is used.
 
+    With ``apply_chat_template`` the harness wraps every prompt with the
+    tokenizer's chat template *before* sending it (lm-eval's ``--apply_chat_template``
+    machinery: task contexts become a single user message, generations add the
+    assistant turn marker). The served model therefore always receives
+    chat-formatted text even though the wire protocol stays the raw
+    ``/v1/completions`` endpoint — required for chat/RL-trained models that
+    degrade on bare prompts. The template comes from the local HF tokenizer
+    (``tokenizer`` arg); ``tokenizer_backend=huggingface`` is forced so the
+    template is rendered client-side instead of falling back to the remote
+    tokenizer (which cannot render it).
+
     Args:
         model: Model id. Served by the endpoint when ``base_url`` is given,
             otherwise a HuggingFace id.
         tasks: Benchmark task ids passed to ``--tasks`` (comma-joined).
         base_url: OpenAI-compatible endpoint root, or None for a HuggingFace id.
         num_fewshot: Override the registered few-shot count (None => default).
-        batch_size: Harness batch size (default ``"auto"``).
+        batch_size: Harness batch size (default 'auto').
         limit: Cap examples per task (debug only; None => unlimited).
-        output_dir: Directory the harness writes ``results.json`` into.
+        output_dir: Directory the harness writes results.json into.
         log_samples: Append ``--log_samples`` so per-example results are emitted.
-        harness_cmd: The harness entrypoint (default ``"lm_eval"``).
+        harness_cmd: The harness entrypoint (default 'lm_eval').
         tokenizer: Local HF tokenizer path / id for the ``local-completions``
             model type (the harness otherwise loads a tokenizer named after the
             served model id, which fails for locally-served models).
         max_gen_toks: Max generation tokens for generative tasks (the harness
             default of 256 truncates CoT answers on math-style benchmarks).
+        apply_chat_template: Wrap every prompt in the tokenizer's chat template
+            before sending. Requires ``tokenizer`` (a local HF tokenizer whose
+            chat_template.jinja / tokenizer_config.json provides the template).
 
     Returns:
         The full argv list ready for :func:`subprocess.run`.
@@ -68,6 +83,11 @@ def build_command(
         if not api_base.endswith("/completions"):
             api_base += "/completions"
         model_args = f"model={model},base_url={api_base}"
+        if apply_chat_template:
+            # Force the local HF tokenizer: the remote tokenizer backend cannot
+            # render the chat template (it returns the raw message list), which
+            # would silently skip templating.
+            model_args += ",tokenizer_backend=huggingface"
         if tokenizer:
             model_args += f",tokenizer={tokenizer}"
         if max_gen_toks:
@@ -89,6 +109,14 @@ def build_command(
         "--tasks",
         ",".join(tasks),
     ]
+    if apply_chat_template:
+        if tokenizer is None:
+            raise ValueError(
+                "apply_chat_template=True requires a local HF tokenizer "
+                "(pass `tokenizer`) — the remote tokenizer backend cannot "
+                "render the chat template."
+            )
+        cmd.append("--apply_chat_template")
     if confirm_run_unsafe_code:
         cmd.append("--confirm_run_unsafe_code")
     if log_samples:

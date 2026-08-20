@@ -35,6 +35,41 @@ def test_build_command_local_completions_keeps_full_url():
     ]
 
 
+def test_build_command_apply_chat_template_forces_local_tokenizer():
+    cmd = build_command(
+        "m",
+        ["gsm8k"],
+        base_url="http://x:8000/v1",
+        tokenizer="/models/m",
+        apply_chat_template=True,
+    )
+    # --apply_chat_template must render the template client-side: force the
+    # huggingface backend, otherwise the remote tokenizer would silently skip
+    # templating and the model would receive bare prompts.
+    args = cmd[cmd.index("--model_args") + 1]
+    assert "tokenizer_backend=huggingface" in args
+    assert "tokenizer=/models/m" in args
+    assert "--apply_chat_template" in cmd
+    # wire protocol stays the raw completions endpoint (loglikelihood relies
+    # on echo+logprobs which /v1/chat/completions does not provide)
+    assert "base_url=http://x:8000/v1/completions" in args
+
+
+def test_build_command_apply_chat_template_without_tokenizer_raises():
+    with pytest.raises(ValueError, match="requires a local HF tokenizer"):
+        build_command(
+            "m", ["gsm8k"], base_url="http://x:8000/v1", apply_chat_template=True
+        )
+
+
+def test_build_command_apply_chat_template_off_by_default():
+    cmd = build_command("m", ["t"], base_url="http://x", tokenizer="/models/m")
+    assert "--apply_chat_template" not in cmd
+    assert "tokenizer_backend=huggingface" not in cmd[
+        cmd.index("--model_args") + 1
+    ]
+
+
 def test_build_command_local_completions_extra_args():
     cmd = build_command(
         "m",

@@ -56,6 +56,11 @@ class EvaluationConfig(BaseModel):
     # CLI flag --confirm_run_unsafe_code is passed (in addition to the
     # HF_ALLOW_CODE_EVAL=1 env var for the code_eval metric).
     confirm_run_unsafe_code: bool = False
+    # Wrap every prompt in the tokenizer's chat template before sending
+    # (lm-eval --apply_chat_template). Chat/RL-trained models degrade on bare
+    # prompts, so they must see chat-formatted input even via the raw
+    # /v1/completions endpoint. Requires `tokenizer` (local HF path).
+    apply_chat_template: bool = False
 
 
 class ServingConfig(BaseModel):

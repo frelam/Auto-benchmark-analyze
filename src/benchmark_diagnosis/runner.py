@@ -567,6 +567,7 @@ def _collect_scores(
         num_concurrent=settings.evaluation.num_concurrent,
         max_length=settings.evaluation.max_length,
         confirm_run_unsafe_code=settings.evaluation.confirm_run_unsafe_code,
+        apply_chat_template=settings.evaluation.apply_chat_template,
     )
     if request.benchmarks:
         console.print(f"[cyan]Evaluating {len(tasks)} benchmark(s)[/] (subset: {','.join(tasks)})")
