@@ -1,0 +1,71 @@
+tests/test_runner.py
+  h_25cf8a8e4e8b34 66-68,129,136,145,148,154,163,178,183,190,222,230,252,261,278-281,348,351
+  s_f20e2782c0dcb6::t_dfdd3458821dbb 268,284-310
+scripts/install.sh
+  h_25cf8a8e4e8b34 98
+README.md
+  h_25cf8a8e4e8b34 50,65-66,68-69,77,84,88,92,95-96,118,121-123,142,150,153
+config/default.yaml
+  s_f20e2782c0dcb6::t_840bfb5c9f2ffe 25-33
+  h_25cf8a8e4e8b34 87,89
+src/benchmark_diagnosis/evaluation_orchestration/harness_bridge.py
+  s_f20e2782c0dcb6::t_f21240305340c6 48-49
+  s_f20e2782c0dcb6::t_c5cf27ee6999f6 88-93
+  s_f20e2782c0dcb6::t_7d953938ff7e16 151-156
+examples/run-full-llm.yaml
+  h_25cf8a8e4e8b34 22
+config/run-qwen3-4b-tool-rl.yaml
+  s_f20e2782c0dcb6::t_0404172b555d4b 21-25
+examples/run-endpoint.yaml
+  h_25cf8a8e4e8b34 7-8,12
+examples/run-from-scores.yaml
+  h_25cf8a8e4e8b34 6-8,12
+examples/README.md
+  h_25cf8a8e4e8b34 20,23,39,41
+src/benchmark_diagnosis/cli.py
+  s_f20e2782c0dcb6::t_0926c4871bb4b3 267-268
+  h_25cf8a8e4e8b34 33-37,257-260,262-266,270-273,281,283-284,315,335,440-446
+src/benchmark_diagnosis/config.py
+  s_f20e2782c0dcb6::t_ba4a35869d0fbc 40-47
+  h_25cf8a8e4e8b34 96,107
+src/benchmark_diagnosis/runner.py
+  h_25cf8a8e4e8b34 46,70,98,112,118-120,148,155,162,169,178,182,193,195,210-212,231,283,295,328,462-464,474-475,477-481,495-496,503,551-561
+  s_f20e2782c0dcb6::t_496b883a8f29bd 471-472
+  s_f20e2782c0dcb6::t_af0bb2ed1b9d0f 468-470
+tests/test_harness_bridge.py
+  s_f20e2782c0dcb6::t_3ca393b4eda323 121-144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "0e937cbeca0afe1c1561ac296aa848060679d99e",
+  "prompts": {},
+  "humans": {
+    "h_25cf8a8e4e8b34": {
+      "author": "lvhaoyu <lvhaoyu@huawei.com>"
+    }
+  },
+  "sessions": {
+    "s_f20e2782c0dcb6": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a880aa13286b8e10f3d3865",
+        "model": "qwen3.8-max"
+      },
+      "human_author": "lvhaoyu <lvhaoyu@huawei.com>",
+      "custom_attributes": {
+        "tool_id": "icube:applyChatSnapshotPatch",
+        "source_scene": "agent",
+        "runtime_client": "trae-tob-git-ai",
+        "edit_kind": "file_edit",
+        "operation_id": "6a880eb63286b8e10f3d38f9",
+        "client_type": "ide",
+        "external_session_id": "6a880aa13286b8e10f3d3865",
+        "tool_use_id": "6a880eb63286b8e10f3d38f9",
+        "dedupe_key": "6a880aa13286b8e10f3d3865:6a880eb63286b8e10f3d38f9:afterEdit:879b7eeb",
+        "session_id": "6a880aa13286b8e10f3d3865",
+        "tool_type": "builtin"
+      }
+    }
+  }
+}
