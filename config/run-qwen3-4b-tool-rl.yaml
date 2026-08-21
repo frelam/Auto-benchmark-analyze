@@ -18,6 +18,11 @@ evaluation:
   max_length: 32768            # longbench_v2 needs long context; served ctx is 32768
   timeout: 7200             # 覆盖 16384 tokens 最坏生成 (~4819s @ 3.4 tok/s)
   confirm_run_unsafe_code: true  # humaneval executes generated code
+  # 随机采样评测：每个生成式 prompt 采样 5 次，harness 自动对分数取平均。
+  # 只影响生成式任务（mmlu/mmlu_pro 等选择题是确定性打分，不受影响）；
+  # 生成耗时/显存占用约放大 5 倍。
+  repeats: 5
+  gen_kwargs: {temperature: 0.7, top_p: 0.95}
 
 recommendation:
   advisor_mode: rules          # deterministic experience-base engine

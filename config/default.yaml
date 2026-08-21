@@ -22,15 +22,15 @@ evaluation:
   batch_size: auto
   limit: null               # optional int: cap examples per task (debug only)
   output_dir: data/eval_runs
-  tokenizer: null           # local HF tokenizer path for endpoint evals (local-completions)
-  max_gen_toks: 1024        # max generation tokens for generative tasks
-  num_concurrent: 16        # concurrent API requests (harness default 1 is slow)
-  max_length: 2048          # max input context tokens (raise for long-context benchmarks)
-  timeout: 3600             # per-request HTTP timeout (s); lm-eval default 300 is too
-                            # short for V100 slow decode (16-concurrent ~3.4 tok/s/req)
-  confirm_run_unsafe_code: false  # allow code-execution tasks like humaneval
-  apply_chat_template: false      # wrap prompts in the tokenizer chat template
-                                  # (chat/RL models degrade on bare prompts)
+  # Random-sampling eval: sample each generative prompt `repeats` times and
+  # let the harness average the metric over the samples (e.g. 5 runs at
+  # temperature=0.7). null => single greedy pass. Only generative tasks are
+  # affected (log-likelihood tasks like mmlu stay deterministic). Cost scales
+  # ~N x with `repeats`. Example:
+  #   repeats: 5
+  #   gen_kwargs: {temperature: 0.7, top_p: 0.95}
+  repeats: null
+  gen_kwargs: null          # sampling kwargs, e.g. {temperature: 0.7, top_p: 0.95}
 
 serving:
   engine: vllm             # vllm (sglang planned)
@@ -84,9 +84,9 @@ recommendation:
 run:
   mode: full                  # benchmark (eval only, writes scores.json) | analyze (eval + diagnosis) | full (eval + diagnosis + recommendations)
   model:
-    name: null                # logical model id/name (auto-derived from model_path for weights)
+    name: null                # logical model id/name (required for run)
     source: null              # weights | endpoint | scores (null => auto-detect)
-    model_path: null          # HF id or local weights path (source=weights -> auto-deploy)
+    weights: null             # HF id or local path (source=weights -> auto-deploy)
     base_url: null            # OpenAI-compatible /v1 endpoint (source=endpoint)
     scores_file: null         # JSON {benchmark_id: score} (source=scores, skip eval)
     benchmarks: null          # null => full representative portfolio; or a subset like [mmlu_pro, math]

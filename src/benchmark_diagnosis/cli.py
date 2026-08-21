@@ -30,6 +30,11 @@ from benchmark_diagnosis.evaluation_orchestration.deploy import (
     serve_command,
     wait_until_ready,
 )
+from benchmark_diagnosis.evaluation_orchestration.harness_bridge import (
+    build_command,
+    extract_scores,
+    run_eval,
+)
 from benchmark_diagnosis.pipeline import build_offline
 from benchmark_diagnosis.reporting import visualize as viz
 from benchmark_diagnosis.reporting.report_generator import render_results_summary
@@ -37,7 +42,6 @@ from benchmark_diagnosis.runner import (
     RunResult,
     build_run_request,
     ensure_offline,
-    evaluate_tasks,
     execute_run,
     portfolio_benchmarks,
 )
@@ -250,13 +254,23 @@ def eval_model(
             session.close()
     else:
         task_list = tasks.split(",")
-    scores = evaluate_tasks(
-        settings,
-        model=model,
+    output_dir = Path(settings.evaluation.output_dir)
+    cmd = build_command(
+        model,
+        task_list,
         base_url=base_url,
-        tasks=task_list,
+        num_fewshot=settings.evaluation.num_fewshot,
+        batch_size=settings.evaluation.batch_size,
+        limit=settings.evaluation.limit,
+        output_dir=output_dir,
+        harness_cmd=settings.evaluation.harness_cmd,
+        repeats=settings.evaluation.repeats,
+        gen_kwargs=settings.evaluation.gen_kwargs,
     )
-    console.print(f"[green]{len(scores)} benchmark(s) scored[/]")
+    console.print("[cyan]Running:[/] " + " ".join(cmd))
+    results = run_eval(cmd)
+    scores = extract_scores(results)
+    _print_scores(scores)
 
 
 @app.command()
@@ -264,14 +278,10 @@ def run(
     ctx: typer.Context,
     model: str = typer.Option(
         None, "--model",
-        help="Model name reported in the output. Optional for all sources — "
-             "auto-derived from --model-path (weights), the service's /v1/models "
-             "(--base-url), or the scores file's _model key (--scores; falls back "
-             "to the file stem). Pass explicitly to override.",
+        help="Model name reported in the output (defaults to --model-id for weights).",
     ),
-    model_path: str = typer.Option(
-        None, "--model-path",
-        help="HuggingFace weights id or local weights path to auto-deploy (source: weights).",
+    model_id: str = typer.Option(
+        None, "--model-id", help="HF weights id or local path to auto-deploy (source: weights).",
     ),
     base_url: str = typer.Option(
         None, "--base-url", help="Existing OpenAI-compatible endpoint / inference service IP.",
@@ -302,20 +312,16 @@ def run(
 ) -> None:
     """One command: deploy or reuse an endpoint, evaluate, diagnose, advise.
 
-    Exactly one model source must be provided — ``--model-path`` (auto-deploys
-    via vLLM), ``--base-url`` (reuse an inference service), or ``--scores`` (a
-    JSON scores file, no evaluation). Source, mode, and advisor can also come
-    from a YAML config via ``--config``. ``--mode`` picks how far the pipeline
-    goes: ``benchmark`` (eval only, writes ``scores.json`` — feed it back with
+    Exactly one model source must be provided — ``--model-id`` (auto-deploys via
+    vLLM), ``--base-url`` (reuse an inference service), or ``--scores`` (a JSON
+    scores file, no evaluation). Source, mode, and advisor can also come from a
+    YAML config via ``--config``. ``--mode`` picks how far the pipeline goes:
+    ``benchmark`` (eval only, writes ``scores.json`` — feed it back with
     ``--scores``), ``analyze`` (eval + diagnosis, no recommendations), or
     ``full`` (eval + diagnosis + recommendations, default). The diagnosis in
     ``analyze``/``full`` always runs the unified stages 1-7 intelligent
     pipeline; ``--mode analyze`` skips Stage 6 suggestions. ``--benchmarks``
     narrows the evaluation to a subset of the representative portfolio.
-    ``--model`` is optional for all sources — auto-derived from ``--model-path``
-    (basename / last segment of the HF id), the service's ``/v1/models``
-    (``--base-url``), or the scores file's ``_model`` key (``--scores``;
-    falls back to the file stem). Pass ``--model`` explicitly to override.
     """
     settings: Settings = ctx.obj
     benchmark_list = (
@@ -326,7 +332,7 @@ def run(
     result = _run_or_exit(
         settings,
         model=model,
-        model_path=model_path,
+        model_id=model_id,
         base_url=base_url,
         scores=scores,
         mode=mode,
@@ -429,6 +435,15 @@ def feedback_recalibrate(
     )
     for stype, ratio in sorted(cal.costs.items()):
         console.print(f"  {stype}: cost ratio {ratio:.2f}")
+
+
+def _print_scores(scores: dict[str, float]) -> None:
+    table = Table(title="Evaluation scores")
+    table.add_column("task", style="cyan")
+    table.add_column("score", justify="right")
+    for task, score in sorted(scores.items()):
+        table.add_row(task, f"{score:.4f}")
+    console.print(table)
 
 
 if __name__ == "__main__":

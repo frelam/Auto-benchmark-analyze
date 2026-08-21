@@ -118,6 +118,30 @@ def test_build_command_batch_size_and_output_dir(tmp_path):
     assert cmd[cmd.index("--output_path") + 1] == str(out)
 
 
+def test_build_command_repeats_and_gen_kwargs():
+    cmd = build_command(
+        "m",
+        ["gsm8k"],
+        base_url="http://x",
+        repeats=5,
+        gen_kwargs={"temperature": 0.7, "top_p": 0.95},
+    )
+    assert cmd[cmd.index("--repeats") + 1] == "5"
+    assert cmd[cmd.index("--gen_kwargs") + 1] == "temperature=0.7,top_p=0.95"
+
+
+def test_build_command_repeats_one_is_single_pass():
+    # repeats=1 (and None) keep the default single greedy pass.
+    for repeats in (None, 1):
+        cmd = build_command("m", ["t"], base_url="http://x", repeats=repeats)
+        assert "--repeats" not in cmd
+
+
+def test_build_command_gen_kwargs_none_omits_flag():
+    cmd = build_command("m", ["t"], base_url="http://x", gen_kwargs=None)
+    assert "--gen_kwargs" not in cmd
+
+
 def test_build_command_default_batch_size_auto():
     cmd = build_command("m", ["t"])
     assert cmd[cmd.index("--batch_size") + 1] == "auto"

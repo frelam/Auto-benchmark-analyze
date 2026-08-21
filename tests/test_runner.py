@@ -12,9 +12,7 @@ from benchmark_diagnosis.data import ingestion
 from benchmark_diagnosis.runner import (
     RunRequest,
     build_run_request,
-    detect_served_model,
     execute_run,
-    read_scores_model,
 )
 
 SCORES = {"mmlu_pro": 50.0, "math": 40.0, "swe_bench": 18.0}
@@ -62,21 +60,14 @@ class _StubProc:
         self.waited = True
 
 
-_HARNESS_SCORES = {"mmlu_pro": 0.5, "hendrycks_math": 0.4}
-
-
-def _harness_results(cmd: list[str]) -> dict:
-    """Fake harness: returns results for exactly the requested lm-eval task.
-
-    Mirrors the real per-task runs: each subprocess's results payload carries
-    only the task it was asked to evaluate. ``mmlu_pro`` is an identity task,
-    ``math`` is aliased to ``hendrycks_math``; swe_bench has no evaluable task
-    in this pinned harness, so it is never requested.
-    """
-    task = cmd[cmd.index("--tasks") + 1]
-    if task not in _HARNESS_SCORES:
-        return {"results": {}}
-    return {"results": {task: {"acc,none": _HARNESS_SCORES[task]}}}
+def _harness_results() -> dict:
+    return {
+        "results": {
+            "mmlu_pro": {"acc,none": 0.5},
+            "math": {"acc,none": 0.4},
+            "swe_bench": {"pass@1": 0.18},
+        }
+    }
 
 
 def test_execute_run_scores_path_writes_artifacts(run_env):
@@ -135,14 +126,14 @@ def test_execute_run_benchmark_mode_writes_scores_and_skips_diagnosis(run_env):
     settings, tmp_path, scores_path = run_env
     request = RunRequest(
         model="llama-3-8b", mode="benchmark", source="weights",
-        model_path="meta-llama/Llama-3-8B",
+        weights="meta-llama/Llama-3-8B",
     )
     proc = _StubProc()
     result = execute_run(
         settings, request,
         deploy_weights=lambda cmd: proc,
         wait_ready=lambda _: True,
-        run_harness=_harness_results,
+        run_harness=lambda cmd: _harness_results(),
     )
     assert result.mode == "benchmark"
     assert result.figure_paths == []
@@ -151,22 +142,16 @@ def test_execute_run_benchmark_mode_writes_scores_and_skips_diagnosis(run_env):
     assert result.report_path == result.metrics_path
     assert result.report_path.exists()
     written = json.loads(result.report_path.read_text(encoding="utf-8"))
-    # scores.json carries the _model metadata key (the explicit --model value
-    # here) so a follow-up `run --scores <path>` picks up the model name
-    # without needing --model.
-    assert written == {
-        "mmlu_pro": 0.5, "math": 0.4,
-        "_model": "llama-3-8b",
-    }
+    assert written == {"mmlu_pro": 0.5, "math": 0.4, "swe_bench": 0.18}
     # no diagnosis artifacts: clusters absent, report carries only scores.
     assert "clusters" not in result.report
-    assert result.report["scores"] == {"mmlu_pro": 0.5, "math": 0.4}
+    assert result.report["scores"] == {"mmlu_pro": 0.5, "math": 0.4, "swe_bench": 0.18}
 
 
 def test_build_run_request_accepts_benchmark_mode(run_env):
     settings, tmp_path, scores_path = run_env
     request = build_run_request(
-        settings, model_path="meta-llama/Llama-3-8B", mode="benchmark"
+        settings, model_id="meta-llama/Llama-3-8B", mode="benchmark"
     )
     assert request.mode == "benchmark"
     assert request.source == "weights"
@@ -175,7 +160,7 @@ def test_build_run_request_accepts_benchmark_mode(run_env):
 def test_execute_run_weights_path_deploys_and_tears_down(run_env, monkeypatch):
     settings, tmp_path, scores_path = run_env
     request = RunRequest(
-        model="llama-3-8b", source="weights", model_path="meta-llama/Llama-3-8B"
+        model="llama-3-8b", source="weights", weights="meta-llama/Llama-3-8B"
     )
     proc = _StubProc()
     called: list[str] = []
@@ -190,19 +175,19 @@ def test_execute_run_weights_path_deploys_and_tears_down(run_env, monkeypatch):
         request,
         deploy_weights=fake_deploy,
         wait_ready=lambda _: True,
-        run_harness=_harness_results,
+        run_harness=lambda cmd: _harness_results(),
     )
     assert called == ["deploy"]
     assert proc.terminated and proc.waited  # torn down in finally
     assert result.served is True
-    assert result.report["scores"] == {"mmlu_pro": 0.5, "math": 0.4}
+    assert result.report["scores"] == {"mmlu_pro": 0.5, "math": 0.4, "swe_bench": 0.18}
     assert result.report_path.exists()
 
 
 def test_execute_run_deploy_failure_tears_down(run_env):
     settings, tmp_path, scores_path = run_env
     request = RunRequest(
-        model="llama-3-8b", source="weights", model_path="meta-llama/Llama-3-8B"
+        model="llama-3-8b", source="weights", weights="meta-llama/Llama-3-8B"
     )
     proc = _StubProc()
 
@@ -234,7 +219,7 @@ def test_build_run_request_benchmarks_cli_overrides_config(run_env):
     settings, tmp_path, scores_path = run_env
     settings.run.model.benchmarks = ["mmlu_pro", "gsm8k"]
     request = build_run_request(
-        settings, model_path="meta-llama/Llama-3-8B", benchmarks=["math", "swe_bench"]
+        settings, model_id="meta-llama/Llama-3-8B", benchmarks=["math", "swe_bench"]
     )
     assert request.benchmarks == ["math", "swe_bench"]
 
@@ -242,7 +227,7 @@ def test_build_run_request_benchmarks_cli_overrides_config(run_env):
 def test_build_run_request_benchmarks_from_config(run_env):
     settings, tmp_path, scores_path = run_env
     settings.run.model.benchmarks = ["mmlu_pro", "math"]
-    request = build_run_request(settings, model_path="meta-llama/Llama-3-8B")
+    request = build_run_request(settings, model_id="meta-llama/Llama-3-8B")
     assert request.benchmarks == ["mmlu_pro", "math"]
 
 
@@ -264,7 +249,7 @@ def test_build_run_request_benchmarks_ignored_on_scores_path(run_env):
 def test_build_run_request_benchmarks_empty_list_is_unset(run_env):
     settings, tmp_path, scores_path = run_env
     settings.run.model.benchmarks = []
-    request = build_run_request(settings, model_path="meta-llama/Llama-3-8B")
+    request = build_run_request(settings, model_id="meta-llama/Llama-3-8B")
     assert request.benchmarks is None
 
 
@@ -273,14 +258,14 @@ def test_execute_run_benchmarks_subset_limits_eval_tasks(run_env):
     request = RunRequest(
         model="llama-3-8b",
         source="weights",
-        model_path="meta-llama/Llama-3-8B",
+        weights="meta-llama/Llama-3-8B",
         benchmarks=["mmlu_pro", "math", "swe_bench"],
     )
     captured: list[list[str]] = []
 
     def fake_harness(cmd):
         captured.append(cmd)
-        return _harness_results(cmd)
+        return _harness_results()
 
     execute_run(
         settings,
@@ -289,18 +274,40 @@ def test_execute_run_benchmarks_subset_limits_eval_tasks(run_env):
         wait_ready=lambda _: True,
         run_harness=fake_harness,
     )
-    # Only the requested subset is sent to the harness, translated to lm-eval
-    # task names via the task registry; benchmarks without an evaluable task
-    # (swe_bench in this pinned harness) are skipped with a warning. Each
-    # dataset now runs in its own subprocess, so the harness sees one command
-    # per task.
-    assert len(captured) == 2
-    seen_tasks = set()
-    for cmd in captured:
-        tasks_idx = cmd.index("--tasks") + 1
-        assert "," not in cmd[tasks_idx]  # one task per harness process
-        seen_tasks.add(cmd[tasks_idx])
-    assert seen_tasks == {"mmlu_pro", "hendrycks_math"}
+    # Only the requested subset is sent to the harness.
+    assert len(captured) == 1
+    tasks_idx = captured[0].index("--tasks") + 1
+    tasks = captured[0][tasks_idx].split(",")
+    assert set(tasks) == {"mmlu_pro", "math", "swe_bench"}
+
+
+def test_execute_run_repeats_sampling_forwards_to_harness(run_env):
+    settings, tmp_path, scores_path = run_env
+    # Random-sampling eval: each generative prompt is sampled `repeats` times
+    # and the harness averages the metric over the samples.
+    settings.evaluation.repeats = 5
+    settings.evaluation.gen_kwargs = {"temperature": 0.7, "top_p": 0.95}
+    request = RunRequest(
+        model="llama-3-8b", source="weights", weights="meta-llama/Llama-3-8B"
+    )
+    captured: list[list[str]] = []
+
+    def fake_harness(cmd):
+        captured.append(cmd)
+        return _harness_results()
+
+    execute_run(
+        settings,
+        request,
+        deploy_weights=lambda cmd: _StubProc(),
+        wait_ready=lambda _: True,
+        run_harness=fake_harness,
+    )
+    assert len(captured) == 1
+    assert captured[0][captured[0].index("--repeats") + 1] == "5"
+    assert captured[0][captured[0].index("--gen_kwargs") + 1] == (
+        "temperature=0.7,top_p=0.95"
+    )
 
 
 def test_execute_run_fails_fast_on_forced_llm_without_model(run_env):
@@ -338,29 +345,10 @@ def test_build_run_request_from_config_scores(run_env):
 
 def test_build_run_request_weights_defaults_model(run_env):
     settings, tmp_path, scores_path = run_env
-    # --model is optional for weights: auto-derived as the basename of model_path.
-    request = build_run_request(settings, model_path="meta-llama/Llama-3-8B")
+    request = build_run_request(settings, model_id="meta-llama/Llama-3-8B")
     assert request.source == "weights"
-    assert request.model == "Llama-3-8B"
-    assert request.model_path == "meta-llama/Llama-3-8B"
-
-
-def test_build_run_request_weights_local_path_derives_model(run_env):
-    settings, tmp_path, scores_path = run_env
-    # A local filesystem path also derives a clean model name from its basename.
-    request = build_run_request(settings, model_path="/data/models/my-model/")
-    assert request.source == "weights"
-    assert request.model == "my-model"
-    assert request.model_path == "/data/models/my-model/"
-
-
-def test_build_run_request_weights_explicit_model_wins(run_env):
-    settings, tmp_path, scores_path = run_env
-    # An explicit --model still takes precedence over the derived basename.
-    request = build_run_request(
-        settings, model="llama-3-8b", model_path="meta-llama/Llama-3-8B"
-    )
-    assert request.model == "llama-3-8b"
+    assert request.model == "meta-llama/Llama-3-8B"
+    assert request.weights == "meta-llama/Llama-3-8B"
 
 
 def test_build_run_request_cli_overrides_config_source(run_env):
@@ -397,209 +385,3 @@ def test_build_run_request_rejects_bogus_mode(run_env):
     settings, tmp_path, scores_path = run_env
     with pytest.raises(ValueError, match="unknown mode"):
         build_run_request(settings, scores=str(scores_path), mode="bogus")
-
-
-# --- model-name auto-derivation for endpoint / scores paths ----------------
-
-
-def test_build_run_request_endpoint_allows_missing_model(run_env):
-    """--model is optional on the endpoint path (auto-detected in execute_run)."""
-    settings, tmp_path, scores_path = run_env
-    request = build_run_request(settings, base_url="http://example:8000/v1")
-    assert request.source == "endpoint"
-    assert request.base_url == "http://example:8000/v1"
-    assert request.model is None  # resolved later in execute_run
-
-
-def test_build_run_request_scores_allows_missing_model(run_env):
-    """--model is optional on the scores path (read from _model in execute_run)."""
-    settings, tmp_path, scores_path = run_env
-    request = build_run_request(settings, scores=str(scores_path))
-    assert request.source == "scores"
-    assert request.scores_file == scores_path
-    assert request.model is None  # resolved later in execute_run
-
-
-def test_read_scores_model_returns_metadata_key(tmp_path):
-    """read_scores_model reads the optional _model metadata field."""
-    p = tmp_path / "scores.json"
-    p.write_text(
-        json.dumps({"_model": "llama-3-8b", "_note": "x", "mmlu_pro": 50.0}),
-        encoding="utf-8",
-    )
-    assert read_scores_model(p) == "llama-3-8b"
-
-
-def test_read_scores_model_returns_none_when_absent(tmp_path):
-    p = tmp_path / "scores.json"
-    p.write_text(json.dumps({"mmlu_pro": 50.0}), encoding="utf-8")
-    assert read_scores_model(p) is None
-
-
-def test_read_scores_model_returns_none_on_invalid_json(tmp_path):
-    p = tmp_path / "scores.json"
-    p.write_text("{not valid json", encoding="utf-8")
-    assert read_scores_model(p) is None
-
-
-def test_detect_served_model_returns_first_id(monkeypatch):
-    """detect_served_model probes /v1/models and returns the first model id."""
-    import benchmark_diagnosis.runner as runner_mod
-
-    class _Resp:
-        status_code = 200
-
-        def json(self):
-            return {"data": [{"id": "served-model-name"}, {"id": "other"}]}
-
-    class _Client:
-        def __init__(self, *a, **kw):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-        def get(self, url):
-            assert url == "http://example:8000/v1/models"
-            return _Resp()
-
-    monkeypatch.setattr(runner_mod.httpx, "Client", _Client)
-    assert detect_served_model("http://example:8000/v1") == "served-model-name"
-
-
-def test_detect_served_model_returns_none_on_non_200(monkeypatch):
-    import benchmark_diagnosis.runner as runner_mod
-
-    class _Resp:
-        status_code = 503
-
-        def json(self):
-            return {}
-
-    class _Client:
-        def __init__(self, *a, **kw):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-        def get(self, url):
-            return _Resp()
-
-    monkeypatch.setattr(runner_mod.httpx, "Client", _Client)
-    assert detect_served_model("http://example:8000/v1") is None
-
-
-def test_detect_served_model_returns_none_on_http_error(monkeypatch):
-    import httpx
-
-    import benchmark_diagnosis.runner as runner_mod
-
-    class _Client:
-        def __init__(self, *a, **kw):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-        def get(self, url):
-            raise httpx.ConnectError("refused")
-
-    monkeypatch.setattr(runner_mod.httpx, "Client", _Client)
-    assert detect_served_model("http://example:8000/v1") is None
-
-
-def test_execute_run_scores_path_resolves_model_from_metadata(run_env):
-    """When --model is omitted on the scores path, _model is read from the file."""
-    settings, tmp_path, scores_path = run_env
-    # Write a scores file carrying _model metadata.
-    scores_path.write_text(
-        json.dumps({"_model": "from-file", **SCORES}), encoding="utf-8"
-    )
-    request = RunRequest(model=None, source="scores", scores_file=scores_path)
-    result = execute_run(settings, request, deploy_weights=_NoServer)
-    assert result.mode == "full"
-    # The model name from _model propagates into the metrics.
-    metrics = json.loads(result.metrics_path.read_text(encoding="utf-8"))
-    assert metrics["model"]["model_id"] == "from-file"
-
-
-def test_execute_run_scores_path_falls_back_to_file_stem(run_env):
-    """No --model and no _model key: the model name falls back to the file stem."""
-    settings, tmp_path, scores_path = run_env
-    # scores_path.name == "scores.json" -> stem "scores"
-    request = RunRequest(model=None, source="scores", scores_file=scores_path)
-    result = execute_run(settings, request, deploy_weights=_NoServer)
-    metrics = json.loads(result.metrics_path.read_text(encoding="utf-8"))
-    assert metrics["model"]["model_id"] == "scores"
-
-
-def test_execute_run_endpoint_path_auto_detects_model(run_env, monkeypatch):
-    """On the endpoint path with --model omitted, /v1/models is probed."""
-    settings, tmp_path, scores_path = run_env
-    request = RunRequest(
-        model=None, source="endpoint", base_url="http://example:8000/v1"
-    )
-    monkeypatch.setattr(
-        "benchmark_diagnosis.runner.detect_served_model",
-        lambda url, **kw: "auto-detected",
-    )
-    result = execute_run(
-        settings, request,
-        deploy_weights=_NoServer,
-        wait_ready=lambda _: True,
-        run_harness=_harness_results,
-    )
-    metrics = json.loads(result.metrics_path.read_text(encoding="utf-8"))
-    assert metrics["model"]["model_id"] == "auto-detected"
-
-
-def test_execute_run_endpoint_path_fallback_when_detection_fails(run_env, monkeypatch):
-    """If /v1/models is unreachable, the endpoint path falls back to a default."""
-    settings, tmp_path, scores_path = run_env
-    request = RunRequest(
-        model=None, source="endpoint", base_url="http://example:8000/v1"
-    )
-    monkeypatch.setattr(
-        "benchmark_diagnosis.runner.detect_served_model",
-        lambda url, **kw: None,
-    )
-    result = execute_run(
-        settings, request,
-        deploy_weights=_NoServer,
-        wait_ready=lambda _: True,
-        run_harness=_harness_results,
-    )
-    metrics = json.loads(result.metrics_path.read_text(encoding="utf-8"))
-    assert metrics["model"]["model_id"] == "served-model"
-
-
-def test_execute_run_benchmark_mode_endpoint_writes_model_metadata(run_env, monkeypatch):
-    """benchmark mode on the endpoint path also writes _model into scores.json."""
-    settings, tmp_path, scores_path = run_env
-    request = RunRequest(
-        model=None, mode="benchmark", source="endpoint",
-        base_url="http://example:8000/v1",
-    )
-    monkeypatch.setattr(
-        "benchmark_diagnosis.runner.detect_served_model",
-        lambda url, **kw: "qwen-2.5-72b",
-    )
-    result = execute_run(
-        settings, request,
-        deploy_weights=_NoServer,
-        wait_ready=lambda _: True,
-        run_harness=_harness_results,
-    )
-    written = json.loads(result.report_path.read_text(encoding="utf-8"))
-    assert written["_model"] == "qwen-2.5-72b"
-    assert written["mmlu_pro"] == 0.5

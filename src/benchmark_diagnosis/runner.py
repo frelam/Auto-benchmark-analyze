@@ -23,13 +23,11 @@ from __future__ import annotations
 import datetime as dt
 import json
 import subprocess
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-import httpx
 from rich.console import Console
 from rich.table import Table
 from sqlalchemy import select
@@ -38,19 +36,16 @@ from sqlalchemy.orm import Session
 from benchmark_diagnosis.config import Settings, resolve_advisor_mode
 from benchmark_diagnosis.core import db
 from benchmark_diagnosis.core.schema import ModelRecord
-from benchmark_diagnosis.data import ingestion, queries
+from benchmark_diagnosis.data import ingestion
 from benchmark_diagnosis.evaluation_orchestration.deploy import (
     serve_command,
     wait_until_ready,
 )
 from benchmark_diagnosis.evaluation_orchestration.harness_bridge import (
     build_command,
-    extract_task_results,
-    fmt_duration,
+    extract_scores,
     run_eval,
-    task_headline,
 )
-from benchmark_diagnosis.evaluation_orchestration.task_registry import to_benchmark_id
 from benchmark_diagnosis.pipeline import build_offline, diagnose_model
 from benchmark_diagnosis.reporting.report_generator import render_json, render_markdown
 
@@ -72,7 +67,7 @@ class RunRequest:
     model: str | None = None
     mode: str = "full"
     source: Literal["weights", "endpoint", "scores"] | None = None
-    model_path: str | None = None
+    weights: str | None = None
     base_url: str | None = None
     scores_file: Path | None = None
     benchmarks: list[str] | None = None
@@ -100,7 +95,7 @@ def build_run_request(
     settings: Settings,
     *,
     model: str | None = None,
-    model_path: str | None = None,
+    model_id: str | None = None,
     base_url: str | None = None,
     scores: str | Path | None = None,
     mode: str | None = None,
@@ -114,19 +109,15 @@ def build_run_request(
     """Merge CLI arguments over the config's ``run`` profile into a run request.
 
     Precedence is **CLI argument > ``settings.run.model.*``**. The model source
-    is derived from whichever of scores / base_url / model_path is present;
-    passing more than one on the CLI, or configuring more than one source
-    field, raises ``ValueError`` (the sources are mutually exclusive).
+    is derived from whichever of scores / base_url / weights is present; passing
+    more than one on the CLI, or configuring more than one source field, raises
+    ``ValueError`` (the sources are mutually exclusive).
 
     Args:
         settings: Resolved settings.
-        model: Model name reported in the output. Optional for all sources:
-            for ``weights`` it is auto-derived from ``model_path`` (basename /
-            last segment of the HF id); for ``endpoint`` it is auto-detected
-            from the service's ``/v1/models``; for ``scores`` it is read from
-            the file's optional ``_model`` metadata key (falling back to the
-            file stem). Set explicitly to override.
-        model_path: HuggingFace weights id / local path (source ``weights``).
+        model: Model name reported in the output (defaults to the weights id for
+            a weights run, else ``run.model.name``).
+        model_id: HuggingFace weights id / local path (source ``weights``).
         base_url: Existing OpenAI-compatible endpoint (source ``endpoint``).
         scores: JSON ``{benchmark_id: score}`` file (source ``scores``; no eval).
         mode: ``"benchmark"`` (eval only), ``"analyze"`` (eval + diagnosis, no
@@ -154,28 +145,28 @@ def build_run_request(
         for kind, value in (
             ("scores", scores is not None),
             ("endpoint", base_url is not None),
-            ("weights", model_path is not None),
+            ("weights", model_id is not None),
         )
         if value
     ]
     if len(cli_provided) > 1:
         raise ValueError(
             "ambiguous model source: provide exactly one of "
-            "--scores / --base-url / --model-path"
+            "--scores / --base-url / --model-id"
         )
 
     if cli_provided:
         source: str | None = cli_provided[0]
         resolved_scores = Path(scores) if scores is not None else None
         resolved_base_url = base_url
-        resolved_model_path = model_path
+        resolved_weights = model_id
     else:
         cfg_provided = [
             kind
             for kind, value in (
                 ("scores", cfg.scores_file is not None),
                 ("endpoint", cfg.base_url is not None),
-                ("weights", cfg.model_path is not None),
+                ("weights", cfg.weights is not None),
             )
             if value
         ]
@@ -184,11 +175,11 @@ def build_run_request(
         source = cfg_provided[0] if cfg_provided else cfg.source
         resolved_scores = Path(cfg.scores_file) if cfg.scores_file else None
         resolved_base_url = cfg.base_url
-        resolved_model_path = cfg.model_path
+        resolved_weights = cfg.weights
 
     if source is None:
         raise ValueError(
-            "no model source: pass --scores / --base-url / --model-path, "
+            "no model source: pass --scores / --base-url / --model-id, "
             "or set run.model.source in the config"
         )
     if source == "scores" and resolved_scores is None:
@@ -199,9 +190,9 @@ def build_run_request(
         raise ValueError(
             "source=endpoint requires a base_url (--base-url or run.model.base_url)"
         )
-    if source == "weights" and resolved_model_path is None:
+    if source == "weights" and resolved_weights is None:
         raise ValueError(
-            "source=weights requires weights (--model-path or run.model.model_path)"
+            "source=weights requires weights (--model-id or run.model.weights)"
         )
 
     resolved_mode = mode or settings.run.mode
@@ -215,14 +206,10 @@ def build_run_request(
         )
 
     resolved_model = model or cfg.name
-    if resolved_model is None and source == "weights" and resolved_model_path is not None:
-        # Auto-derive a clean model name from the weights path: the last
-        # segment of an HF id ("meta-llama/Llama-3-8B-Instruct" ->
-        # "Llama-3-8B-Instruct") or the basename of a local path.
-        resolved_model = resolved_model_path.rstrip("/").rsplit("/", 1)[-1]
-    # For endpoint / scores paths, resolved_model may stay None and is
-    # resolved later in execute_run: the endpoint path probes /v1/models and
-    # the scores path reads the optional _model metadata key from the file.
+    if resolved_model is None and source == "weights":
+        resolved_model = resolved_weights
+    if resolved_model is None:
+        raise ValueError("a model name is required: pass --model (or set run.model.name)")
 
     # Benchmark subset: CLI wins over config; an empty list reads as "no
     # constraint" so a YAML `benchmarks: []` is the same as unset. Ignored for
@@ -241,7 +228,7 @@ def build_run_request(
         model=resolved_model,
         mode=resolved_mode,
         source=source,
-        model_path=resolved_model_path,
+        weights=resolved_weights,
         base_url=resolved_base_url,
         scores_file=resolved_scores,
         benchmarks=resolved_benchmarks,
@@ -272,9 +259,7 @@ def execute_run(
         wait_ready: Callable polling an OpenAI-compatible ``/v1`` endpoint until
             it answers (default: :func:`deploy.wait_until_ready`).
         run_harness: Callable running the harness argv and returning parsed
-            results (default: :func:`harness_bridge.run_eval` with the live
-            per-task status line enabled; pass a callable to override, e.g. in
-            tests).
+            results (default: :func:`harness_bridge.run_eval`).
 
     Returns:
         A :class:`RunResult` with the report dict and written artifact paths.
@@ -295,8 +280,7 @@ def execute_run(
 
     deploy_weights = deploy_weights or _launch_server
     wait_ready = wait_ready or wait_until_ready
-    # run_harness stays None on the real path: evaluate_tasks then defaults to
-    # run_eval with the live status line. An injected callable (tests) wins.
+    run_harness = run_harness or run_eval
 
     session = _open_session(settings)
     proc: Any = None
@@ -308,7 +292,7 @@ def execute_run(
         source = request.source
         if source == "weights":
             base_url = f"http://{settings.serving.host}:{settings.serving.port}/v1"
-            cmd = serve_command(request.model_path, settings.serving)
+            cmd = serve_command(request.weights, settings.serving)
             console.print("[cyan]Deploying weights...[/] " + " ".join(cmd))
             proc = deploy_weights(cmd)
             if not wait_ready(base_url):
@@ -322,45 +306,7 @@ def execute_run(
                 "no model source in request; expected weights|endpoint|scores"
             )
 
-        # Resolve the model name when --model was omitted. The weights path
-        # already derives it from model_path in build_run_request; the endpoint
-        # path probes /v1/models and the scores path reads the _model metadata
-        # key from the file (falling back to the file stem).
-        if not request.model:
-            if source == "endpoint" and base_url:
-                detected = detect_served_model(base_url)
-                if detected:
-                    console.print(f"[cyan]Auto-detected served model:[/] {detected}")
-                    request.model = detected
-                else:
-                    request.model = "served-model"
-                    console.print(
-                        f"[yellow]Could not read a model id from {base_url}/models; "
-                        f"using '{request.model}'. Pass --model to override.[/]"
-                    )
-            elif source == "scores" and request.scores_file is not None:
-                from_file = read_scores_model(request.scores_file)
-                if from_file:
-                    console.print(f"[cyan]Model from scores file:[/] {from_file}")
-                    request.model = from_file
-                else:
-                    request.model = request.scores_file.stem
-                    console.print(
-                        f"[yellow]No --model and no _model key in the scores file; "
-                        f"using '{request.model}' (file stem). Pass --model to "
-                        f"override.[/]"
-                    )
-
-        raw_scores = _collect_scores(
-            request,
-            base_url,
-            portfolio_ids,
-            run_harness,
-            settings,
-            benchmark_names={
-                b.benchmark_id: b.name for b in queries.list_benchmarks(session)
-            },
-        )
+        raw_scores = _collect_scores(request, base_url, portfolio_ids, run_harness, settings)
 
         if raw_scores and not (portfolio_ids & set(raw_scores)):
             console.print(
@@ -378,11 +324,8 @@ def execute_run(
             )
             scores_path = scores_path.parent / "scores.json"
             scores_path.parent.mkdir(parents=True, exist_ok=True)
-            scores_payload: dict[str, Any] = dict(raw_scores)
-            if request.model:
-                scores_payload["_model"] = request.model
             scores_path.write_text(
-                json.dumps(scores_payload, indent=2, ensure_ascii=False),
+                json.dumps(raw_scores, indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
             console.print(
@@ -466,48 +409,6 @@ def portfolio_benchmarks(session: Session) -> list[str]:
     return sorted(benchmarks)
 
 
-def detect_served_model(base_url: str, *, timeout: float = 10.0) -> str | None:
-    """Probe an OpenAI-compatible ``/v1/models`` endpoint for the served model id.
-
-    Used to auto-derive the model name on the ``endpoint`` path when the user
-    passes only ``--base-url``. Returns the first model id in the response, or
-    ``None`` if the endpoint is unreachable / returns no models.
-    """
-    url = f"{base_url.rstrip('/')}/models"
-    try:
-        with httpx.Client(timeout=timeout) as client:
-            resp = client.get(url)
-        if resp.status_code != 200:
-            return None
-        data = resp.json()
-    except (httpx.HTTPError, ValueError):
-        return None
-    models = data.get("data") if isinstance(data, dict) else data
-    if not isinstance(models, list):
-        return None
-    for m in models:
-        if isinstance(m, dict) and m.get("id"):
-            return str(m["id"])
-        if isinstance(m, str):
-            return m
-    return None
-
-
-def read_scores_model(scores_path: Path) -> str | None:
-    """Return the optional ``_model`` metadata field from a scores JSON file.
-
-    The scores file convention reserves ``_``-prefixed keys for metadata
-    (e.g. ``_note``, ``_model``). Used to auto-derive the model name on the
-    ``scores`` path when the user passes only ``--scores``.
-    """
-    try:
-        payload = json.loads(scores_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return None
-    model = payload.get("_model") if isinstance(payload, dict) else None
-    return str(model) if model else None
-
-
 def get_or_build_model(
     session: Session,
     model_id: str,
@@ -533,10 +434,8 @@ def _collect_scores(
     request: RunRequest,
     base_url: str | None,
     portfolio_ids: set[str],
-    run_harness: Callable[[list[str]], dict[str, Any]] | None,
+    run_harness: Callable[[list[str]], dict[str, Any]],
     settings: Settings,
-    *,
-    benchmark_names: dict[str, str] | None = None,
 ) -> dict[str, float]:
     """Load scores from a file, or evaluate the portfolio and flatten the results."""
     if request.source == "scores":
@@ -560,188 +459,26 @@ def _collect_scores(
     if not tasks:
         console.print("[yellow]No benchmarks to evaluate; skipping eval.[/]")
         return {}
-    return evaluate_tasks(
-        settings,
-        model=request.model,
+    cmd = build_command(
+        request.model,
+        tasks,
         base_url=base_url,
-        tasks=tasks,
-        benchmark_names=benchmark_names,
-        run_harness=run_harness,
+        num_fewshot=settings.evaluation.num_fewshot,
+        batch_size=settings.evaluation.batch_size,
+        limit=settings.evaluation.limit,
+        output_dir=Path(settings.evaluation.output_dir),
+        harness_cmd=settings.evaluation.harness_cmd,
+        repeats=settings.evaluation.repeats,
+        gen_kwargs=settings.evaluation.gen_kwargs,
     )
-
-
-def evaluate_tasks(
-    settings: Settings,
-    *,
-    model: str,
-    base_url: str | None,
-    tasks: list[str],
-    benchmark_names: dict[str, str] | None = None,
-    run_harness: Callable[[list[str]], dict[str, Any]] | None = None,
-) -> dict[str, float]:
-    """Evaluate each task in its own lm-eval subprocess, reporting per dataset.
-
-    Instead of one long multi-task harness process (whose tqdm bars give no
-    hint of which dataset is running and whose scores only surface at the very
-    end), each dataset gets its own subprocess with a clear lifecycle:
-
-    * a plan line lists every dataset up front;
-    * a banner names the dataset being evaluated (``[i/N]``);
-    * while it runs, the harness's tqdm bars are condensed into one live
-      status line (requests done + elapsed) instead of flooding the terminal;
-    * the moment a dataset finishes, its headline metric and score are printed,
-      together with a cumulative progress line and an ETA for the rest;
-    * a summary table with every dataset's score / time / status closes the
-      run.
-
-    A failed task (harness non-zero exit) is reported in red and the remaining
-    datasets still run — one bad dataset no longer discards hours of completed
-    work. Each task's harness artifacts land under
-    ``<evaluation.output_dir>/<task>/``.
-
-    Args:
-        settings: Resolved settings (evaluation knobs + output dir).
-        model: Model name sent to the API.
-        base_url: OpenAI-compatible endpoint, or None for a HuggingFace id.
-        tasks: lm-eval task names to evaluate, one subprocess each.
-        benchmark_names: Optional ``benchmark_id -> display name`` map used in
-            the plan / summary.
-        run_harness: Callable running the harness argv and returning parsed
-            results (default: :func:`harness_bridge.run_eval` with the live
-            status line enabled).
-
-    Returns:
-        Mapping ``benchmark_id -> score``. Group tasks (``longbench2``,
-        ``mmmlu``) contribute their headline — lm-eval's ``groups`` aggregate
-        when present, else the mean over their subtask entries. Tasks that
-        failed or produced no computable score are absent.
-    """
-    if not tasks:
-        return {}
-    n = len(tasks)
-    started = time.monotonic()
-    raw: dict[str, float] = {}
-    rows: list[tuple[str, str, str, str]] = []  # (bid, score, elapsed, status)
-    names = benchmark_names or {}
-    plan = Table(
-        title=f"评测计划 · {model} · {n} 个数据集",
-        title_style="bold cyan",
-    )
-    plan.add_column("#", justify="right")
-    plan.add_column("数据集", style="cyan")
-    if names:
-        plan.add_column("名称")
-    plan.add_column("状态")
-    for i, task in enumerate(tasks, 1):
-        bid = to_benchmark_id(task)
-        if names:
-            plan.add_row(str(i), bid, names.get(bid, "-"), "待评测")
-        else:
-            plan.add_row(str(i), bid, "待评测")
-    console.print(plan)
-    for i, task in enumerate(tasks, 1):
-        bid = to_benchmark_id(task)
-        display = names.get(bid, bid)
-        banner = f"\n[bold cyan]── 开始评测 [{i}/{n}] {bid}[/]"
-        if display != bid:
-            banner += f" · {display}"
-        console.print(banner)
-        cmd = build_command(
-            model,
-            [task],
-            base_url=base_url,
-            num_fewshot=settings.evaluation.num_fewshot,
-            batch_size=settings.evaluation.batch_size,
-            limit=settings.evaluation.limit,
-            output_dir=Path(settings.evaluation.output_dir) / task,
-            harness_cmd=settings.evaluation.harness_cmd,
-            tokenizer=settings.evaluation.tokenizer,
-            max_gen_toks=settings.evaluation.max_gen_toks,
-            num_concurrent=settings.evaluation.num_concurrent,
-            max_length=settings.evaluation.max_length,
-            timeout=settings.evaluation.timeout,
-            confirm_run_unsafe_code=settings.evaluation.confirm_run_unsafe_code,
-            apply_chat_template=settings.evaluation.apply_chat_template,
-        )
-        console.print(f"[dim]  {' '.join(cmd)}[/]")
-        t0 = time.monotonic()
-        try:
-            if run_harness is not None:
-                payload = run_harness(cmd)
-            else:
-                payload = run_eval(cmd, live=True, label=f"{bid} [{i}/{n}]")
-        except RuntimeError as exc:
-            elapsed = time.monotonic() - t0
-            console.print(
-                f"[red]✗ {bid} 评测失败 (用时 {fmt_duration(elapsed)}): "
-                f"{str(exc)[-400:]}[/]"
-            )
-            rows.append((bid, "-", fmt_duration(elapsed), "✗ 失败"))
-            continue
-        elapsed = time.monotonic() - t0
-        headline = task_headline(payload, task)
-        if headline is None:
-            console.print(
-                f"[yellow]⚠ {bid} 完成但没有可识别的得分 (用时 {fmt_duration(elapsed)})[/]"
-            )
-            rows.append((bid, "-", fmt_duration(elapsed), "⚠ 无得分"))
-            continue
-        metric, value = headline
-        raw[bid] = value
-        n_sub = len(extract_task_results(payload, task))
-        suffix = f" · {n_sub} 个子任务" if n_sub > 1 else ""
-        score_text = f"{metric} = {_fmt_score(value)}"
-        console.print(
-            f"[green]✓ {bid} 完成 · {score_text}{suffix} · 用时 {fmt_duration(elapsed)}[/]"
-        )
-        rows.append((bid, score_text, fmt_duration(elapsed), "✓"))
-        if i < n:
-            avg = (time.monotonic() - started) / i
-            eta = avg * (n - i)
-            console.print(
-                f"[cyan]进度: {i}/{n} 完成 · 均值 {fmt_duration(avg)}/数据集"
-                f" · 预计剩余 ~{fmt_duration(eta)}[/]"
-            )
-
-    total = time.monotonic() - started
-    table = Table(
-        title=f"评测结果 · {model} · {len(raw)}/{n} 数据集 · 总用时 {fmt_duration(total)}"
-    )
-    table.add_column("#", justify="right")
-    table.add_column("数据集", style="cyan")
-    if names:
-        table.add_column("名称")
-    table.add_column("得分", justify="right")
-    table.add_column("用时", justify="right")
-    table.add_column("状态")
-    for i, (bid, score_text, dur, status) in enumerate(rows, 1):
-        if names:
-            table.add_row(
-                str(i),
-                bid,
-                names.get(bid, "-"),
-                score_text,
-                dur,
-                _status_markup(status),
-            )
-        else:
-            table.add_row(str(i), bid, score_text, dur, _status_markup(status))
-    console.print(table)
-    return raw
-
-
-def _fmt_score(value: float) -> str:
-    """Format a score: percentage for 0..1 metrics, plain float otherwise."""
-    return f"{value:.2%}" if 0.0 <= value <= 1.0 else f"{value:.4f}"
-
-
-def _status_markup(status: str) -> str:
-    """Colorize a summary-table status cell."""
-    if status == "✓":
-        return "[green]✓[/]"
-    if status.startswith("✗"):
-        return "[red]✗ 失败[/]"
-    return "[yellow]⚠ 无得分[/]"
+    if request.benchmarks:
+        console.print(f"[cyan]Evaluating {len(tasks)} benchmark(s)[/] (subset: {','.join(tasks)})")
+    else:
+        console.print(f"[cyan]Evaluating {len(tasks)} benchmark(s)[/] (full portfolio)")
+    console.print("[dim]  " + " ".join(cmd) + "[/]")
+    raw_scores = extract_scores(run_harness(cmd))
+    _print_scores(raw_scores)
+    return raw_scores
 
 
 def _resolve_eval_tasks(
@@ -749,42 +486,21 @@ def _resolve_eval_tasks(
 ) -> list[str]:
     """Pick the evaluation task list, honoring an optional benchmark subset.
 
-    Benchmark ids are translated to lm-eval task names via the task registry
-    (some seed ids were renamed/moved in the pinned harness version);
-    benchmarks with no evaluable task are skipped with a warning instead of
-    failing the run.
-
     With ``benchmarks=None`` the full representative portfolio is evaluated.
     With a subset, the intersection is evaluated and any requested ids not in
     the portfolio are reported (they are still evaluated — the harness knows the
     task — but they will not feed the cluster analysis downstream).
     """
-    from benchmark_diagnosis.evaluation_orchestration.task_registry import (
-        to_lm_eval_task,
-    )
-
     if not benchmarks:
-        candidates = sorted(portfolio_ids)
-    else:
-        candidates = sorted(set(benchmarks))
-        off = [b for b in candidates if b not in portfolio_ids]
-        if off:
-            console.print(
-                f"[yellow]Warning: {len(off)} of {len(benchmarks)} requested "
-                f"benchmark(s) are not in the representative portfolio and will be "
-                f"evaluated but excluded from cluster analysis: {off}[/]"
-            )
-    tasks: list[str] = []
-    for bid in candidates:
-        task = to_lm_eval_task(bid)
-        if task is None:
-            console.print(
-                f"[yellow]Skipping {bid}: no lm-eval task available in this "
-                f"environment.[/]"
-            )
-        else:
-            tasks.append(task)
-    return tasks
+        return sorted(portfolio_ids)
+    off = [b for b in benchmarks if b not in portfolio_ids]
+    if off:
+        console.print(
+            f"[yellow]Warning: {len(off)} of {len(benchmarks)} requested "
+            f"benchmark(s) are not in the representative portfolio and will be "
+            f"evaluated but excluded from cluster analysis: {off}[/]"
+        )
+    return sorted(benchmarks)
 
 
 def _render_figures(
@@ -832,3 +548,14 @@ def _relpath(path: Path, anchor: Path) -> str:
         return path.resolve().relative_to(anchor.resolve()).as_posix()
     except ValueError:
         return path.as_posix()
+
+
+def _print_scores(scores: dict[str, float]) -> None:
+    if not scores:
+        return
+    table = Table(title="Evaluation scores")
+    table.add_column("task", style="cyan")
+    table.add_column("score", justify="right")
+    for task, score in sorted(scores.items()):
+        table.add_row(task, f"{score:.4f}")
+    console.print(table)

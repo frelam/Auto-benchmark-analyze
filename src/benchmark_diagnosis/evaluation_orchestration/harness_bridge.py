@@ -45,6 +45,8 @@ def build_command(
     timeout: int | None = None,
     confirm_run_unsafe_code: bool = False,
     apply_chat_template: bool = False,
+    repeats: int | None = None,
+    gen_kwargs: dict[str, Any] | None = None,
 ) -> list[str]:
     """Build the lm-evaluation-harness CLI argv for one evaluation run.
 
@@ -83,6 +85,12 @@ def build_command(
         apply_chat_template: Wrap every prompt in the tokenizer's chat template
             before sending. Requires ``tokenizer`` (a local HF tokenizer whose
             chat_template.jinja / tokenizer_config.json provides the template).
+        repeats: Sample each generative prompt this many times (the harness
+            averages mean-aggregated metrics over the samples). None/1 keeps
+            the single greedy pass; requires matching ``gen_kwargs`` for the
+            runs to actually differ.
+        gen_kwargs: Sampling kwargs forwarded to ``--gen_kwargs`` (e.g.
+            ``{"temperature": 0.7, "top_p": 0.95}``).
 
     Returns:
         The full argv list ready for :func:`subprocess.run`.
@@ -140,6 +148,12 @@ def build_command(
         cmd.append("--apply_chat_template")
     if confirm_run_unsafe_code:
         cmd.append("--confirm_run_unsafe_code")
+    if repeats is not None and repeats > 1:
+        cmd += ["--repeats", str(repeats)]
+    if gen_kwargs:
+        # lm-eval parses --gen_kwargs as key=value pairs; join them with
+        # commas (e.g. "temperature=0.7,top_p=0.95").
+        cmd += ["--gen_kwargs", ",".join(f"{k}={v}" for k, v in gen_kwargs.items())]
     if log_samples:
         cmd.append("--log_samples")
     if num_fewshot is not None:

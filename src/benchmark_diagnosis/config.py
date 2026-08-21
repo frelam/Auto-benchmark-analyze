@@ -37,38 +37,14 @@ class EvaluationConfig(BaseModel):
     batch_size: str = "auto"
     limit: int | None = None
     output_dir: str = "data/eval_runs"
-    # Local HF tokenizer path (or HF id) used by the harness when talking to an
-    # OpenAI-compatible endpoint (local-completions model type). Without it the
-    # harness tries to load a tokenizer named after the served model id, which
-    # fails for locally-served models.
-    tokenizer: str | None = None
-    # Max generation tokens for generative tasks (CoT benchmarks like math /
-    # gsm8k often need more than the harness default of 256).
-    max_gen_toks: int = 1024
-    # Concurrent API requests against the endpoint (harness default is 1 —
-    # too slow for thousands of samples on big benchmarks).
-    num_concurrent: int = 16
-    # Max input context length (tokens) for harness requests. Long-context
-    # benchmarks (longbench_v2) need this raised well above the harness
-    # default of 2048; the served model's context length is the upper bound.
-    max_length: int = 2048
-    # Per-request HTTP timeout (seconds) for the harness client. lm-eval's
-    # default is 300s, which is too short on slow hardware (e.g. V100 with
-    # torch_native eager decode + num_concurrent=16: ~3.4 tok/s per request,
-    # so an 8192-token generation takes ~2400s) — requests then die with
-    # aiohttp TimeoutError, tenacity retries exhaust, and the whole eval
-    # collapses with "Connector is closed". Must exceed the worst-case
-    # generation time: max_gen_toks / slowest-per-request-throughput.
-    timeout: int = 3600
-    # lm-eval >= 0.4.12 refuses code-execution tasks (humaneval) unless the
-    # CLI flag --confirm_run_unsafe_code is passed (in addition to the
-    # HF_ALLOW_CODE_EVAL=1 env var for the code_eval metric).
-    confirm_run_unsafe_code: bool = False
-    # Wrap every prompt in the tokenizer's chat template before sending
-    # (lm-eval --apply_chat_template). Chat/RL-trained models degrade on bare
-    # prompts, so they must see chat-formatted input even via the raw
-    # /v1/completions endpoint. Requires `tokenizer` (local HF path).
-    apply_chat_template: bool = False
+    # Random-sampling evaluation: ``repeats`` samples each generative prompt
+    # this many times and the harness averages the metric over the samples
+    # (e.g. 5 runs at temperature=0.7). None/1 keeps the default single
+    # (greedy) pass. Only generative tasks are affected — log-likelihood
+    # tasks (mmlu etc.) are deterministic. Requires matching ``gen_kwargs``
+    # (e.g. temperature > 0) for the runs to actually differ.
+    repeats: int | None = None
+    gen_kwargs: dict[str, Any] | None = None
 
 
 class ServingConfig(BaseModel):
@@ -117,7 +93,7 @@ class RunModelConfig(BaseModel):
     ``source`` selects where the evaluated model comes from: ``weights``
     (auto-deploy via vLLM), ``endpoint`` (an existing OpenAI-compatible
     inference service IP), or ``scores`` (skip evaluation, read a JSON scores
-    file). When ``None`` it is auto-derived from whichever of ``model_path`` /
+    file). When ``None`` it is auto-derived from whichever of ``weights`` /
     ``base_url`` / ``scores_file`` is set.
 
     ``benchmarks`` optionally narrows the evaluation to a subset of the
@@ -128,7 +104,7 @@ class RunModelConfig(BaseModel):
 
     name: str | None = None
     source: Literal["weights", "endpoint", "scores"] | None = None
-    model_path: str | None = None
+    weights: str | None = None
     base_url: str | None = None
     scores_file: str | None = None
     benchmarks: list[str] | None = None
