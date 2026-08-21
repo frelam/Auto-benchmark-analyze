@@ -31,6 +31,19 @@ evaluation:
   #   gen_kwargs: {temperature: 0.7, top_p: 0.95}
   repeats: null
   gen_kwargs: null          # sampling kwargs, e.g. {temperature: 0.7, top_p: 0.95}
+  # Endpoint evaluation knobs (used with --base-url / source=endpoint):
+  tokenizer: null           # local HF tokenizer path (required by apply_chat_template)
+  max_gen_toks: null        # max generation tokens for generative tasks
+  num_concurrent: null      # concurrent requests against the endpoint
+  max_length: null          # model context length
+  timeout: null             # per-request timeout in seconds
+  confirm_run_unsafe_code: false   # allow tasks that execute generated code (humaneval)
+  # Chat-template evaluation: render each prompt through the tokenizer's chat
+  # template client-side, then send the chat-formatted text over the raw
+  # /v1/completions endpoint. Required for chat/RL-trained models that degrade
+  # on bare prompts; log-likelihood tasks (mmlu etc.) keep working because the
+  # wire protocol stays completions. Needs `tokenizer` above.
+  apply_chat_template: false
 
 serving:
   engine: vllm             # vllm (sglang planned)

@@ -148,6 +148,39 @@ def test_execute_run_benchmark_mode_writes_scores_and_skips_diagnosis(run_env):
     assert result.report["scores"] == {"mmlu_pro": 0.5, "math": 0.4, "swe_bench": 0.18}
 
 
+def test_execute_run_passes_evaluation_config_to_harness(run_env):
+    settings, tmp_path, scores_path = run_env
+    settings.evaluation.tokenizer = "/models/qwen3"
+    settings.evaluation.max_gen_toks = 16384
+    settings.evaluation.timeout = 7200
+    settings.evaluation.confirm_run_unsafe_code = True
+    settings.evaluation.apply_chat_template = True
+    request = RunRequest(
+        model="llama-3-8b", mode="benchmark", source="weights",
+        weights="meta-llama/Llama-3-8B",
+    )
+    seen: list[list[str]] = []
+
+    def fake_harness(cmd):
+        seen.append(cmd)
+        return _harness_results()
+
+    execute_run(
+        settings, request,
+        deploy_weights=lambda cmd: _StubProc(),
+        wait_ready=lambda _: True,
+        run_harness=fake_harness,
+    )
+    cmd = seen[0]
+    args = cmd[cmd.index("--model_args") + 1]
+    assert "--apply_chat_template" in cmd
+    assert "tokenizer=/models/qwen3" in args
+    assert "tokenizer_backend=huggingface" in args
+    assert "max_gen_toks=16384" in args
+    assert "timeout=7200" in args
+    assert "--confirm_run_unsafe_code" in cmd
+
+
 def test_build_run_request_accepts_benchmark_mode(run_env):
     settings, tmp_path, scores_path = run_env
     request = build_run_request(

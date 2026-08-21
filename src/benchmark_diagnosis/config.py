@@ -45,6 +45,19 @@ class EvaluationConfig(BaseModel):
     # (e.g. temperature > 0) for the runs to actually differ.
     repeats: int | None = None
     gen_kwargs: dict[str, Any] | None = None
+    # Endpoint evaluation knobs (ignored for local HF weights runs except
+    # ``apply_chat_template``). ``tokenizer`` is the local HF tokenizer whose
+    # chat template ``apply_chat_template`` renders client-side — required
+    # when ``apply_chat_template`` is on. Chat/RL-trained models degrade on
+    # bare prompts; the wire protocol stays the raw completions endpoint so
+    # log-likelihood tasks (mmlu etc.) keep working.
+    tokenizer: str | None = None
+    max_gen_toks: int | None = None
+    num_concurrent: int | None = None
+    max_length: int | None = None
+    timeout: int | None = None
+    confirm_run_unsafe_code: bool = False
+    apply_chat_template: bool = False
 
 
 class ServingConfig(BaseModel):
