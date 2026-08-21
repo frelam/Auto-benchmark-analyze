@@ -149,16 +149,32 @@ def ingest_lm_eval_results(
 
 
 def primary_metric(metrics: dict[str, Any]) -> float | None:
-    """Pick the headline accuracy metric from an lm-eval metrics dict.
+    """Pick the headline accuracy metric value from an lm-eval metrics dict.
 
     Metric keys look like ``"acc,none"`` or ``"exact_match,strict-match"``; we
     prefer the more stringent metric then fall back to ``acc``.
     """
+    key = _primary_metric_key(metrics)
+    return float(metrics[key]) if key is not None else None
+
+
+def primary_metric_name(metrics: dict[str, Any]) -> str | None:
+    """Return the headline metric *name* picked by :func:`primary_metric`.
+
+    Useful for reporting ("acc = 73.45%") — the bare prefix of the winning
+    metric key (``exact_match`` / ``pass@1`` / ``acc`` / ``f1``).
+    """
+    key = _primary_metric_key(metrics)
+    return key.split(",")[0] if key is not None else None
+
+
+def _primary_metric_key(metrics: dict[str, Any]) -> str | None:
+    """Key of the headline metric in ``metrics``, or None when none applies."""
     priority = ("exact_match", "pass@1", "acc", "f1")
     for prefix in priority:
         for key, value in metrics.items():
             if key.split(",")[0] == prefix and isinstance(value, (int, float)):
-                return float(value)
+                return key
     return None
 
 

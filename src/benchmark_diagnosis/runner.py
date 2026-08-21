@@ -23,6 +23,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import subprocess
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -44,9 +45,12 @@ from benchmark_diagnosis.evaluation_orchestration.deploy import (
 )
 from benchmark_diagnosis.evaluation_orchestration.harness_bridge import (
     build_command,
-    extract_scores,
+    extract_task_results,
+    fmt_duration,
     run_eval,
+    task_headline,
 )
+from benchmark_diagnosis.evaluation_orchestration.task_registry import to_benchmark_id
 from benchmark_diagnosis.pipeline import build_offline, diagnose_model
 from benchmark_diagnosis.reporting.report_generator import render_json, render_markdown
 
@@ -268,7 +272,9 @@ def execute_run(
         wait_ready: Callable polling an OpenAI-compatible ``/v1`` endpoint until
             it answers (default: :func:`deploy.wait_until_ready`).
         run_harness: Callable running the harness argv and returning parsed
-            results (default: :func:`harness_bridge.run_eval`).
+            results (default: :func:`harness_bridge.run_eval` with the live
+            per-task status line enabled; pass a callable to override, e.g. in
+            tests).
 
     Returns:
         A :class:`RunResult` with the report dict and written artifact paths.
@@ -289,7 +295,8 @@ def execute_run(
 
     deploy_weights = deploy_weights or _launch_server
     wait_ready = wait_ready or wait_until_ready
-    run_harness = run_harness or run_eval
+    # run_harness stays None on the real path: evaluate_tasks then defaults to
+    # run_eval with the live status line. An injected callable (tests) wins.
 
     session = _open_session(settings)
     proc: Any = None
@@ -350,8 +357,8 @@ def execute_run(
             portfolio_ids,
             run_harness,
             settings,
-            known_benchmarks={
-                b.benchmark_id for b in queries.list_benchmarks(session)
+            benchmark_names={
+                b.benchmark_id: b.name for b in queries.list_benchmarks(session)
             },
         )
 
@@ -526,10 +533,10 @@ def _collect_scores(
     request: RunRequest,
     base_url: str | None,
     portfolio_ids: set[str],
-    run_harness: Callable[[list[str]], dict[str, Any]],
+    run_harness: Callable[[list[str]], dict[str, Any]] | None,
     settings: Settings,
     *,
-    known_benchmarks: set[str] | None = None,
+    benchmark_names: dict[str, str] | None = None,
 ) -> dict[str, float]:
     """Load scores from a file, or evaluate the portfolio and flatten the results."""
     if request.source == "scores":
@@ -553,47 +560,188 @@ def _collect_scores(
     if not tasks:
         console.print("[yellow]No benchmarks to evaluate; skipping eval.[/]")
         return {}
-    cmd = build_command(
-        request.model,
-        tasks,
+    return evaluate_tasks(
+        settings,
+        model=request.model,
         base_url=base_url,
-        num_fewshot=settings.evaluation.num_fewshot,
-        batch_size=settings.evaluation.batch_size,
-        limit=settings.evaluation.limit,
-        output_dir=Path(settings.evaluation.output_dir),
-        harness_cmd=settings.evaluation.harness_cmd,
-        tokenizer=settings.evaluation.tokenizer,
-        max_gen_toks=settings.evaluation.max_gen_toks,
-        num_concurrent=settings.evaluation.num_concurrent,
-        max_length=settings.evaluation.max_length,
-        timeout=settings.evaluation.timeout,
-        confirm_run_unsafe_code=settings.evaluation.confirm_run_unsafe_code,
-        apply_chat_template=settings.evaluation.apply_chat_template,
-    )
-    if request.benchmarks:
-        console.print(f"[cyan]Evaluating {len(tasks)} benchmark(s)[/] (subset: {','.join(tasks)})")
-    else:
-        console.print(f"[cyan]Evaluating {len(tasks)} benchmark(s)[/] (full portfolio)")
-    console.print("[dim]  " + " ".join(cmd) + "[/]")
-    from benchmark_diagnosis.evaluation_orchestration.task_registry import (
-        to_benchmark_id,
+        tasks=tasks,
+        benchmark_names=benchmark_names,
+        run_harness=run_harness,
     )
 
-    # Keep only scores for known benchmark ids (registered benchmarks ∪
-    # requested subset): group tasks like `longbench2` / `mmmlu` expand into
-    # many subtask entries in results.json which would otherwise pollute the
-    # report. When no registered benchmarks are known (e.g. an unseeded DB),
-    # keep everything so scores are never silently dropped.
-    known_ids = set(known_benchmarks or set())
-    if request.benchmarks:
-        known_ids |= set(request.benchmarks)
-    raw_scores = {
-        to_benchmark_id(task): score
-        for task, score in extract_scores(run_harness(cmd)).items()
-        if not known_ids or to_benchmark_id(task) in known_ids
-    }
-    _print_scores(raw_scores)
-    return raw_scores
+
+def evaluate_tasks(
+    settings: Settings,
+    *,
+    model: str,
+    base_url: str | None,
+    tasks: list[str],
+    benchmark_names: dict[str, str] | None = None,
+    run_harness: Callable[[list[str]], dict[str, Any]] | None = None,
+) -> dict[str, float]:
+    """Evaluate each task in its own lm-eval subprocess, reporting per dataset.
+
+    Instead of one long multi-task harness process (whose tqdm bars give no
+    hint of which dataset is running and whose scores only surface at the very
+    end), each dataset gets its own subprocess with a clear lifecycle:
+
+    * a plan line lists every dataset up front;
+    * a banner names the dataset being evaluated (``[i/N]``);
+    * while it runs, the harness's tqdm bars are condensed into one live
+      status line (requests done + elapsed) instead of flooding the terminal;
+    * the moment a dataset finishes, its headline metric and score are printed,
+      together with a cumulative progress line and an ETA for the rest;
+    * a summary table with every dataset's score / time / status closes the
+      run.
+
+    A failed task (harness non-zero exit) is reported in red and the remaining
+    datasets still run — one bad dataset no longer discards hours of completed
+    work. Each task's harness artifacts land under
+    ``<evaluation.output_dir>/<task>/``.
+
+    Args:
+        settings: Resolved settings (evaluation knobs + output dir).
+        model: Model name sent to the API.
+        base_url: OpenAI-compatible endpoint, or None for a HuggingFace id.
+        tasks: lm-eval task names to evaluate, one subprocess each.
+        benchmark_names: Optional ``benchmark_id -> display name`` map used in
+            the plan / summary.
+        run_harness: Callable running the harness argv and returning parsed
+            results (default: :func:`harness_bridge.run_eval` with the live
+            status line enabled).
+
+    Returns:
+        Mapping ``benchmark_id -> score``. Group tasks (``longbench2``,
+        ``mmmlu``) contribute their headline — lm-eval's ``groups`` aggregate
+        when present, else the mean over their subtask entries. Tasks that
+        failed or produced no computable score are absent.
+    """
+    if not tasks:
+        return {}
+    n = len(tasks)
+    started = time.monotonic()
+    raw: dict[str, float] = {}
+    rows: list[tuple[str, str, str, str]] = []  # (bid, score, elapsed, status)
+    names = benchmark_names or {}
+    plan = Table(
+        title=f"评测计划 · {model} · {n} 个数据集",
+        title_style="bold cyan",
+    )
+    plan.add_column("#", justify="right")
+    plan.add_column("数据集", style="cyan")
+    if names:
+        plan.add_column("名称")
+    plan.add_column("状态")
+    for i, task in enumerate(tasks, 1):
+        bid = to_benchmark_id(task)
+        if names:
+            plan.add_row(str(i), bid, names.get(bid, "-"), "待评测")
+        else:
+            plan.add_row(str(i), bid, "待评测")
+    console.print(plan)
+    for i, task in enumerate(tasks, 1):
+        bid = to_benchmark_id(task)
+        display = names.get(bid, bid)
+        banner = f"\n[bold cyan]── 开始评测 [{i}/{n}] {bid}[/]"
+        if display != bid:
+            banner += f" · {display}"
+        console.print(banner)
+        cmd = build_command(
+            model,
+            [task],
+            base_url=base_url,
+            num_fewshot=settings.evaluation.num_fewshot,
+            batch_size=settings.evaluation.batch_size,
+            limit=settings.evaluation.limit,
+            output_dir=Path(settings.evaluation.output_dir) / task,
+            harness_cmd=settings.evaluation.harness_cmd,
+            tokenizer=settings.evaluation.tokenizer,
+            max_gen_toks=settings.evaluation.max_gen_toks,
+            num_concurrent=settings.evaluation.num_concurrent,
+            max_length=settings.evaluation.max_length,
+            timeout=settings.evaluation.timeout,
+            confirm_run_unsafe_code=settings.evaluation.confirm_run_unsafe_code,
+            apply_chat_template=settings.evaluation.apply_chat_template,
+        )
+        console.print(f"[dim]  {' '.join(cmd)}[/]")
+        t0 = time.monotonic()
+        try:
+            if run_harness is not None:
+                payload = run_harness(cmd)
+            else:
+                payload = run_eval(cmd, live=True, label=f"{bid} [{i}/{n}]")
+        except RuntimeError as exc:
+            elapsed = time.monotonic() - t0
+            console.print(
+                f"[red]✗ {bid} 评测失败 (用时 {fmt_duration(elapsed)}): "
+                f"{str(exc)[-400:]}[/]"
+            )
+            rows.append((bid, "-", fmt_duration(elapsed), "✗ 失败"))
+            continue
+        elapsed = time.monotonic() - t0
+        headline = task_headline(payload, task)
+        if headline is None:
+            console.print(
+                f"[yellow]⚠ {bid} 完成但没有可识别的得分 (用时 {fmt_duration(elapsed)})[/]"
+            )
+            rows.append((bid, "-", fmt_duration(elapsed), "⚠ 无得分"))
+            continue
+        metric, value = headline
+        raw[bid] = value
+        n_sub = len(extract_task_results(payload, task))
+        suffix = f" · {n_sub} 个子任务" if n_sub > 1 else ""
+        score_text = f"{metric} = {_fmt_score(value)}"
+        console.print(
+            f"[green]✓ {bid} 完成 · {score_text}{suffix} · 用时 {fmt_duration(elapsed)}[/]"
+        )
+        rows.append((bid, score_text, fmt_duration(elapsed), "✓"))
+        if i < n:
+            avg = (time.monotonic() - started) / i
+            eta = avg * (n - i)
+            console.print(
+                f"[cyan]进度: {i}/{n} 完成 · 均值 {fmt_duration(avg)}/数据集"
+                f" · 预计剩余 ~{fmt_duration(eta)}[/]"
+            )
+
+    total = time.monotonic() - started
+    table = Table(
+        title=f"评测结果 · {model} · {len(raw)}/{n} 数据集 · 总用时 {fmt_duration(total)}"
+    )
+    table.add_column("#", justify="right")
+    table.add_column("数据集", style="cyan")
+    if names:
+        table.add_column("名称")
+    table.add_column("得分", justify="right")
+    table.add_column("用时", justify="right")
+    table.add_column("状态")
+    for i, (bid, score_text, dur, status) in enumerate(rows, 1):
+        if names:
+            table.add_row(
+                str(i),
+                bid,
+                names.get(bid, "-"),
+                score_text,
+                dur,
+                _status_markup(status),
+            )
+        else:
+            table.add_row(str(i), bid, score_text, dur, _status_markup(status))
+    console.print(table)
+    return raw
+
+
+def _fmt_score(value: float) -> str:
+    """Format a score: percentage for 0..1 metrics, plain float otherwise."""
+    return f"{value:.2%}" if 0.0 <= value <= 1.0 else f"{value:.4f}"
+
+
+def _status_markup(status: str) -> str:
+    """Colorize a summary-table status cell."""
+    if status == "✓":
+        return "[green]✓[/]"
+    if status.startswith("✗"):
+        return "[red]✗ 失败[/]"
+    return "[yellow]⚠ 无得分[/]"
 
 
 def _resolve_eval_tasks(
@@ -684,14 +832,3 @@ def _relpath(path: Path, anchor: Path) -> str:
         return path.resolve().relative_to(anchor.resolve()).as_posix()
     except ValueError:
         return path.as_posix()
-
-
-def _print_scores(scores: dict[str, float]) -> None:
-    if not scores:
-        return
-    table = Table(title="Evaluation scores")
-    table.add_column("task", style="cyan")
-    table.add_column("score", justify="right")
-    for task, score in sorted(scores.items()):
-        table.add_row(task, f"{score:.4f}")
-    console.print(table)

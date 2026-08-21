@@ -3,18 +3,28 @@
 We invoke the harness as a subprocess and parse its ``results.json`` rather than
 importing its Python API — its API changes often, while the CLI is the stable
 contract (ARCHITECTURE.md section 1).
+
+:func:`run_eval` streams the harness output live. In ``live`` mode the noisy
+tqdm progress bars (``Requesting API: 99%|...|`` — one line per update when
+stdout is a pipe) are filtered out and condensed into a single status line that
+rewrites in place on a TTY and ticks periodically when piped, so long evals
+never look frozen and per-dataset progress is readable.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
+import threading
+import time
 from collections import deque
 from pathlib import Path
 from typing import Any
 
-from benchmark_diagnosis.data.ingestion import primary_metric
+from benchmark_diagnosis.data.ingestion import primary_metric, primary_metric_name
+from benchmark_diagnosis.evaluation_orchestration.task_registry import to_benchmark_id
 
 
 def build_command(
@@ -143,7 +153,14 @@ def build_command(
     return cmd
 
 
-def run_eval(cmd: list[str], *, cwd: str | Path | None = None) -> dict:
+def run_eval(
+    cmd: list[str],
+    *,
+    cwd: str | Path | None = None,
+    live: bool = False,
+    label: str | None = None,
+    tick: float = 30.0,
+) -> dict:
     """Run the harness command and load its ``results.json``.
 
     The harness output is streamed to stdout live — lm-eval's per-task
@@ -151,9 +168,20 @@ def run_eval(cmd: list[str], *, cwd: str | Path | None = None) -> dict:
     of being hidden until the process exits (long evals otherwise look
     frozen). A bounded output tail is kept for the error report.
 
+    With ``live=True`` the tqdm progress-bar lines are filtered out of the
+    stream and condensed into one status line (:class:`_LiveStatus`): on a TTY
+    it rewrites a single line in place (updated on every bar tick, at least
+    once per ``tick`` seconds), and when piped it emits one line per tick so
+    progress still lands in logs. Non-bar lines (lm-eval INFO/ERROR logs) are
+    streamed as usual, and the status line is ended cleanly before each of
+    them. ``label`` names the running task in the status line.
+
     Args:
         cmd: argv produced by :func:`build_command`.
         cwd: Working directory for the subprocess (e.g. the repo root).
+        live: Filter tqdm progress bars into a single live status line.
+        label: Task name shown in the live status line (``live=True`` only).
+        tick: Seconds between status refreshes when no bar update arrives.
 
     Returns:
         The parsed results payload, or ``{}`` if no ``--output_path`` was given
@@ -170,11 +198,24 @@ def run_eval(cmd: list[str], *, cwd: str | Path | None = None) -> dict:
         cwd=str(cwd) if cwd is not None else None,
     )
     assert proc.stdout is not None
+    status = _LiveStatus(label or "evaluating", tick=tick) if live else None
     tail: deque[str] = deque(maxlen=200)  # bounded tail for the error report
-    for line in proc.stdout:
-        sys.stdout.write(line)
-        sys.stdout.flush()
-        tail.append(line)
+    try:
+        for line in proc.stdout:
+            if status is not None:
+                progress = _parse_progress_line(line)
+                if progress is not None:
+                    status.update(progress)
+                    continue
+                if _is_progress_line(line):
+                    continue  # unparseable bar line: drop it, the status shows liveness
+                status.before_emit()
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            tail.append(line)
+    finally:
+        if status is not None:
+            status.close()
     rc = proc.wait()
     if rc != 0:
         tail_text = "".join(tail).strip()
@@ -186,6 +227,192 @@ def run_eval(cmd: list[str], *, cwd: str | Path | None = None) -> dict:
     if output_dir is None:
         return {}
     return parse_results(output_dir / "results.json")
+
+
+# --- live status line -------------------------------------------------------
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+# tqdm bar lines look like:  Requesting API:  99%|█████████▊| 534/541 [1:22:09<00:56,  8.11s/it]
+_PROGRESS_RE = re.compile(
+    r"^(?P<desc>.*?):\s*(?P<pct>\d+)%\|.*?\|\s*(?P<cur>\d+)/(?P<total>\d+)"
+    r" \[(?P<elapsed>[\d:]+)<(?P<remain>[^,]*),.*?\]\s*$"
+)
+# Generic "this is a progress bar" hint: percentage + count/range + rate.
+_PROGRESS_HINT_RE = re.compile(r"\d+%\|.*\|\s*\d+/\d+ \[.*(?:it/s|s/it)\]")
+
+
+def fmt_duration(seconds: float) -> str:
+    """Format seconds compactly: ``1:22:09`` / ``5:03`` / ``42s``."""
+    seconds = int(seconds)
+    hours, rem = divmod(seconds, 3600)
+    minutes, secs = divmod(rem, 60)
+    if hours:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    if minutes:
+        return f"{minutes}:{secs:02d}"
+    return f"{secs}s"
+
+
+def _clean_ansi(line: str) -> str:
+    return _ANSI_RE.sub("", line).strip()
+
+
+def _parse_progress_line(line: str) -> str | None:
+    """Parse a tqdm bar line into a compact status string, or None.
+
+    ``"Requesting API:  99%|...| 534/541 [1:22:09<00:56, 8.11s/it]"`` becomes
+    ``"Requesting API: 534/541 (99%) · 1:22:09"``.
+    """
+    clean = _clean_ansi(line)
+    match = _PROGRESS_RE.match(clean)
+    if match is None:
+        return None
+    pct = int(match.group("pct"))
+    cur = int(match.group("cur"))
+    total = int(match.group("total"))
+    return (
+        f"{match.group('desc')}: {cur}/{total} ({pct}%)"
+        f" · {match.group('elapsed')}"
+    )
+
+
+def _is_progress_line(line: str) -> bool:
+    """True when ``line`` looks like a tqdm progress bar (rate suffix)."""
+    return bool(_PROGRESS_HINT_RE.search(_clean_ansi(line)))
+
+
+class _LiveStatus:
+    """One-line live status for a running harness task.
+
+    A daemon ticker thread refreshes the line every ``tick`` seconds. On a TTY
+    the line rewrites in place (``\\r`` + ANSI erase); when piped each refresh
+    emits a full line so progress still reaches logs. ``update`` may be called
+    from the output reader with freshly parsed bar progress — on a TTY the
+    status then redraws immediately (at most once per second). Callers must
+    call :meth:`close` once the subprocess ends and :meth:`before_emit` before
+    printing any other output line.
+    """
+
+    def __init__(self, label: str, tick: float = 30.0) -> None:
+        self._label = label
+        self._tick = tick if tick > 0 else 30.0
+        self._lock = threading.Lock()
+        self._progress = ""
+        self._started = time.monotonic()
+        self._tty = sys.stdout.isatty()
+        self._line_open = False
+        self._last_render = 0.0
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.start()
+
+    def update(self, progress: str) -> None:
+        """Refresh the status with newly parsed bar progress."""
+        with self._lock:
+            self._progress = progress
+            if self._tty and time.monotonic() - self._last_render >= 1.0:
+                self._render_locked()
+
+    def before_emit(self) -> None:
+        """End the status line before a real output line is printed."""
+        if self._tty and self._line_open:
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+            self._line_open = False
+
+    def close(self) -> None:
+        self._stop.set()
+        self._thread.join(timeout=1.0)
+        self.before_emit()
+
+    def _loop(self) -> None:
+        while not self._stop.wait(self._tick):
+            with self._lock:
+                self._render_locked()
+
+    def _render_locked(self) -> None:
+        elapsed = time.monotonic() - self._started
+        text = (
+            f"⏳ {self._label} · {self._progress or 'running'}"
+            f" · {fmt_duration(elapsed)}"
+        )
+        self._last_render = time.monotonic()
+        if self._tty:
+            sys.stdout.write("\r\x1b[2K" + text)
+            sys.stdout.flush()
+            self._line_open = True
+        else:
+            sys.stdout.write(text + "\n")
+            sys.stdout.flush()
+
+
+# --- per-task score extraction ----------------------------------------------
+
+
+def extract_task_results(
+    results: dict[str, Any], task: str
+) -> list[tuple[str, str, float]]:
+    """Scores attributable to one evaluated task, as ``(entry, metric, value)``.
+
+    A single-task run's ``results.json`` may carry more than the task's own
+    entry: group tasks (``longbench2``, ``mmmlu``) expand into ``task_*``
+    subtask entries, and the registry aliases benchmark ids to task names
+    (``math`` -> ``hendrycks_math``). An entry belongs to ``task`` when its
+    name equals the task, starts with ``task_``, or maps back to the same
+    benchmark id.
+
+    Args:
+        results: Parsed lm-evaluation-harness results payload.
+        task: The lm-eval task name that was evaluated.
+
+    Returns:
+        ``(entry_name, metric_name, score)`` tuples for every attributable
+        entry with a computable primary metric, in payload order.
+    """
+    bid = to_benchmark_id(task)
+    out: list[tuple[str, str, float]] = []
+    for name, metrics in (results.get("results") or {}).items():
+        if not (
+            name == task
+            or name.startswith(task + "_")
+            or to_benchmark_id(name) == bid
+        ):
+            continue
+        metric = primary_metric_name(metrics)
+        value = primary_metric(metrics)
+        if metric is not None and value is not None:
+            out.append((name, metric, value))
+    return out
+
+
+def task_headline(results: dict[str, Any], task: str) -> tuple[str, float] | None:
+    """Headline ``(metric, score)`` for one evaluated task, or None.
+
+    Group tasks have no single score in their subtask entries; lm-eval
+    aggregates them in the payload's ``groups`` section (weighted by sample
+    count), which is preferred when present. Falls back to the arithmetic mean
+    over the task's own entries so a group still reports one number.
+
+    Args:
+        results: Parsed lm-evaluation-harness results payload.
+        task: The lm-eval task name that was evaluated.
+
+    Returns:
+        ``(metric_name, score)``, or ``None`` when the task produced no
+        attributable, computable score.
+    """
+    groups = results.get("groups") or {}
+    group_metrics = groups.get(task) if isinstance(groups, dict) else None
+    if isinstance(group_metrics, dict):
+        metric = primary_metric_name(group_metrics)
+        value = primary_metric(group_metrics)
+        if metric is not None and value is not None:
+            return (metric, value)
+    entries = extract_task_results(results, task)
+    if not entries:
+        return None
+    mean = sum(value for _, _, value in entries) / len(entries)
+    return (entries[0][1], mean)
 
 
 def parse_results(path: str | Path) -> dict:

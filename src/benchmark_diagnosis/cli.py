@@ -30,11 +30,6 @@ from benchmark_diagnosis.evaluation_orchestration.deploy import (
     serve_command,
     wait_until_ready,
 )
-from benchmark_diagnosis.evaluation_orchestration.harness_bridge import (
-    build_command,
-    extract_scores,
-    run_eval,
-)
 from benchmark_diagnosis.pipeline import build_offline
 from benchmark_diagnosis.reporting import visualize as viz
 from benchmark_diagnosis.reporting.report_generator import render_results_summary
@@ -42,6 +37,7 @@ from benchmark_diagnosis.runner import (
     RunResult,
     build_run_request,
     ensure_offline,
+    evaluate_tasks,
     execute_run,
     portfolio_benchmarks,
 )
@@ -254,23 +250,13 @@ def eval_model(
             session.close()
     else:
         task_list = tasks.split(",")
-    output_dir = Path(settings.evaluation.output_dir)
-    cmd = build_command(
-        model,
-        task_list,
+    scores = evaluate_tasks(
+        settings,
+        model=model,
         base_url=base_url,
-        num_fewshot=settings.evaluation.num_fewshot,
-        batch_size=settings.evaluation.batch_size,
-        limit=settings.evaluation.limit,
-        output_dir=output_dir,
-        harness_cmd=settings.evaluation.harness_cmd,
-        apply_chat_template=settings.evaluation.apply_chat_template,
-        timeout=settings.evaluation.timeout,
+        tasks=task_list,
     )
-    console.print("[cyan]Running:[/] " + " ".join(cmd))
-    results = run_eval(cmd)
-    scores = extract_scores(results)
-    _print_scores(scores)
+    console.print(f"[green]{len(scores)} benchmark(s) scored[/]")
 
 
 @app.command()
@@ -443,15 +429,6 @@ def feedback_recalibrate(
     )
     for stype, ratio in sorted(cal.costs.items()):
         console.print(f"  {stype}: cost ratio {ratio:.2f}")
-
-
-def _print_scores(scores: dict[str, float]) -> None:
-    table = Table(title="Evaluation scores")
-    table.add_column("task", style="cyan")
-    table.add_column("score", justify="right")
-    for task, score in sorted(scores.items()):
-        table.add_row(task, f"{score:.4f}")
-    console.print(table)
 
 
 if __name__ == "__main__":

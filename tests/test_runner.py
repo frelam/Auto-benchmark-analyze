@@ -62,14 +62,21 @@ class _StubProc:
         self.waited = True
 
 
-def _harness_results() -> dict:
-    return {
-        "results": {
-            "mmlu_pro": {"acc,none": 0.5},
-            "math": {"acc,none": 0.4},
-            "swe_bench": {"pass@1": 0.18},
-        }
-    }
+_HARNESS_SCORES = {"mmlu_pro": 0.5, "hendrycks_math": 0.4}
+
+
+def _harness_results(cmd: list[str]) -> dict:
+    """Fake harness: returns results for exactly the requested lm-eval task.
+
+    Mirrors the real per-task runs: each subprocess's results payload carries
+    only the task it was asked to evaluate. ``mmlu_pro`` is an identity task,
+    ``math`` is aliased to ``hendrycks_math``; swe_bench has no evaluable task
+    in this pinned harness, so it is never requested.
+    """
+    task = cmd[cmd.index("--tasks") + 1]
+    if task not in _HARNESS_SCORES:
+        return {"results": {}}
+    return {"results": {task: {"acc,none": _HARNESS_SCORES[task]}}}
 
 
 def test_execute_run_scores_path_writes_artifacts(run_env):
@@ -135,7 +142,7 @@ def test_execute_run_benchmark_mode_writes_scores_and_skips_diagnosis(run_env):
         settings, request,
         deploy_weights=lambda cmd: proc,
         wait_ready=lambda _: True,
-        run_harness=lambda cmd: _harness_results(),
+        run_harness=_harness_results,
     )
     assert result.mode == "benchmark"
     assert result.figure_paths == []
@@ -148,12 +155,12 @@ def test_execute_run_benchmark_mode_writes_scores_and_skips_diagnosis(run_env):
     # here) so a follow-up `run --scores <path>` picks up the model name
     # without needing --model.
     assert written == {
-        "mmlu_pro": 0.5, "math": 0.4, "swe_bench": 0.18,
+        "mmlu_pro": 0.5, "math": 0.4,
         "_model": "llama-3-8b",
     }
     # no diagnosis artifacts: clusters absent, report carries only scores.
     assert "clusters" not in result.report
-    assert result.report["scores"] == {"mmlu_pro": 0.5, "math": 0.4, "swe_bench": 0.18}
+    assert result.report["scores"] == {"mmlu_pro": 0.5, "math": 0.4}
 
 
 def test_build_run_request_accepts_benchmark_mode(run_env):
@@ -183,12 +190,12 @@ def test_execute_run_weights_path_deploys_and_tears_down(run_env, monkeypatch):
         request,
         deploy_weights=fake_deploy,
         wait_ready=lambda _: True,
-        run_harness=lambda cmd: _harness_results(),
+        run_harness=_harness_results,
     )
     assert called == ["deploy"]
     assert proc.terminated and proc.waited  # torn down in finally
     assert result.served is True
-    assert result.report["scores"] == {"mmlu_pro": 0.5, "math": 0.4, "swe_bench": 0.18}
+    assert result.report["scores"] == {"mmlu_pro": 0.5, "math": 0.4}
     assert result.report_path.exists()
 
 
@@ -273,7 +280,7 @@ def test_execute_run_benchmarks_subset_limits_eval_tasks(run_env):
 
     def fake_harness(cmd):
         captured.append(cmd)
-        return _harness_results()
+        return _harness_results(cmd)
 
     execute_run(
         settings,
@@ -284,11 +291,16 @@ def test_execute_run_benchmarks_subset_limits_eval_tasks(run_env):
     )
     # Only the requested subset is sent to the harness, translated to lm-eval
     # task names via the task registry; benchmarks without an evaluable task
-    # (swe_bench in this pinned harness) are skipped with a warning.
-    assert len(captured) == 1
-    tasks_idx = captured[0].index("--tasks") + 1
-    tasks = captured[0][tasks_idx].split(",")
-    assert set(tasks) == {"mmlu_pro", "hendrycks_math"}
+    # (swe_bench in this pinned harness) are skipped with a warning. Each
+    # dataset now runs in its own subprocess, so the harness sees one command
+    # per task.
+    assert len(captured) == 2
+    seen_tasks = set()
+    for cmd in captured:
+        tasks_idx = cmd.index("--tasks") + 1
+        assert "," not in cmd[tasks_idx]  # one task per harness process
+        seen_tasks.add(cmd[tasks_idx])
+    assert seen_tasks == {"mmlu_pro", "hendrycks_math"}
 
 
 def test_execute_run_fails_fast_on_forced_llm_without_model(run_env):
@@ -545,7 +557,7 @@ def test_execute_run_endpoint_path_auto_detects_model(run_env, monkeypatch):
         settings, request,
         deploy_weights=_NoServer,
         wait_ready=lambda _: True,
-        run_harness=lambda cmd: _harness_results(),
+        run_harness=_harness_results,
     )
     metrics = json.loads(result.metrics_path.read_text(encoding="utf-8"))
     assert metrics["model"]["model_id"] == "auto-detected"
@@ -565,7 +577,7 @@ def test_execute_run_endpoint_path_fallback_when_detection_fails(run_env, monkey
         settings, request,
         deploy_weights=_NoServer,
         wait_ready=lambda _: True,
-        run_harness=lambda cmd: _harness_results(),
+        run_harness=_harness_results,
     )
     metrics = json.loads(result.metrics_path.read_text(encoding="utf-8"))
     assert metrics["model"]["model_id"] == "served-model"
@@ -586,7 +598,7 @@ def test_execute_run_benchmark_mode_endpoint_writes_model_metadata(run_env, monk
         settings, request,
         deploy_weights=_NoServer,
         wait_ready=lambda _: True,
-        run_harness=lambda cmd: _harness_results(),
+        run_harness=_harness_results,
     )
     written = json.loads(result.report_path.read_text(encoding="utf-8"))
     assert written["_model"] == "qwen-2.5-72b"

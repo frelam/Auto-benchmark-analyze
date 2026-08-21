@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import json
-import subprocess
-from types import SimpleNamespace
+import time
 
 import pytest
 
@@ -12,8 +11,11 @@ from benchmark_diagnosis.evaluation_orchestration import harness_bridge
 from benchmark_diagnosis.evaluation_orchestration.harness_bridge import (
     build_command,
     extract_scores,
+    extract_task_results,
+    fmt_duration,
     parse_results,
     run_eval,
+    task_headline,
 )
 
 
@@ -245,3 +247,134 @@ def test_build_command_timeout_omitted_when_none():
     cmd = build_command("m", ["t"], base_url="http://x")
     args = cmd[cmd.index("--model_args") + 1]
     assert "timeout=" not in args
+
+
+# --- live status line -------------------------------------------------------
+
+
+def test_parse_progress_line_condenses_tqdm_bar():
+    line = "Requesting API:  99%|█████████▊| 534/541 [1:22:09<00:56,  8.11s/it]"
+    assert harness_bridge._parse_progress_line(line) == (
+        "Requesting API: 534/541 (99%) · 1:22:09"
+    )
+    assert harness_bridge._is_progress_line(line) is True
+    assert harness_bridge._is_progress_line("Setting up task: 100%|██| 30/30 [00:01<00:00, 17.62it/s]") is True
+    # plain log lines are not progress bars
+    assert harness_bridge._parse_progress_line("Building contexts for t...") is None
+    assert harness_bridge._is_progress_line("Building contexts for t...") is False
+
+
+def test_fmt_duration():
+    assert fmt_duration(42) == "42s"
+    assert fmt_duration(302) == "5:02"
+    assert fmt_duration(5029) == "1:23:49"
+
+
+def test_run_eval_live_filters_progress_bars_and_ticks(tmp_path, monkeypatch, capsys):
+    cmd = build_command("m", ["t"], base_url="http://x", output_dir=tmp_path)
+
+    def _stream():
+        yield "Building contexts for t...\n"
+        yield "Requesting API:  50%|██████████     | 270/541 [1:02:09<00:56,  8.11s/it]\n"
+        time.sleep(0.15)  # give the status ticker time to fire
+        yield "Requesting API: 100%|██████████████| 541/541 [1:23:03<00:00,  9.21s/it]\n"
+        yield "task t: done\n"
+
+    class FakePopen:
+        def __init__(self, argv, **kwargs):
+            self.stdout = _stream()
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr(harness_bridge.subprocess, "Popen", FakePopen)
+    run_eval(cmd, live=True, label="t", tick=0.05)
+    out = capsys.readouterr().out
+    # raw tqdm bar lines are condensed, not streamed line by line
+    assert "Requesting API:  50%|" not in out
+    assert "Requesting API: 100%|" not in out
+    # real log lines still stream live
+    assert "Building contexts for t..." in out
+    assert "task t: done" in out
+    # the live status line carries the task label + parsed request progress
+    assert "⏳ t" in out
+    assert "Requesting API: 270/541 (50%)" in out
+
+
+def test_run_eval_live_still_streams_without_bars(tmp_path, monkeypatch, capsys):
+    cmd = build_command("m", ["t"], base_url="http://x", output_dir=tmp_path)
+
+    class FakePopen:
+        def __init__(self, argv, **kwargs):
+            self.stdout = ["loading task t...\n", "task t: done\n"]
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr(harness_bridge.subprocess, "Popen", FakePopen)
+    run_eval(cmd, live=True, tick=0.05)
+    out = capsys.readouterr().out
+    assert "loading task t..." in out
+    assert "task t: done" in out
+
+
+# --- per-task score extraction ----------------------------------------------
+
+
+def test_extract_task_results_aliased_and_group_entries():
+    results = {
+        "results": {
+            "hendrycks_math": {"acc,none": 0.4},
+            "math": {"exact_match,strict-match": 0.35},  # same benchmark id, aliased
+            "longbench2_2wikimqa": {"acc,none": 0.5},  # group subtask entries
+            "longbench2_dureader": {"acc,none": 0.6},
+            "other_task": {"acc,none": 0.9},  # unrelated -> dropped
+        }
+    }
+    assert extract_task_results(results, "hendrycks_math") == [
+        ("hendrycks_math", "acc", 0.4),
+        ("math", "exact_match", 0.35),
+    ]
+    assert extract_task_results(results, "longbench2") == [
+        ("longbench2_2wikimqa", "acc", 0.5),
+        ("longbench2_dureader", "acc", 0.6),
+    ]
+    assert extract_task_results(results, "other_task") == [("other_task", "acc", 0.9)]
+
+
+def test_extract_task_results_ignores_unrelated_and_metricless():
+    results = {
+        "results": {
+            "mmlu_pro": {"acc,none": 0.5},
+            "gsm8k": {"bleu,none": 0.3},  # no recognized metric -> dropped
+        }
+    }
+    assert extract_task_results(results, "mmlu_pro") == [("mmlu_pro", "acc", 0.5)]
+    assert extract_task_results(results, "gsm8k") == []
+
+
+def test_task_headline_prefers_group_aggregate():
+    results = {
+        "results": {
+            "longbench2_2wikimqa": {"acc,none": 0.5},
+            "longbench2_dureader": {"acc,none": 0.6},
+        },
+        "groups": {"longbench2": {"acc,none": 0.55}},
+    }
+    assert task_headline(results, "longbench2") == ("acc", 0.55)
+
+
+def test_task_headline_falls_back_to_subtask_mean():
+    results = {
+        "results": {
+            "longbench2_2wikimqa": {"acc,none": 0.5},
+            "longbench2_dureader": {"acc,none": 0.7},
+        }
+    }
+    assert task_headline(results, "longbench2") == ("acc", 0.6)
+
+
+def test_task_headline_none_when_no_attributable_score():
+    results = {"results": {"some_other_task": {"acc,none": 0.9}}}
+    assert task_headline(results, "longbench2") is None
+    assert task_headline({}, "mmlu") is None
