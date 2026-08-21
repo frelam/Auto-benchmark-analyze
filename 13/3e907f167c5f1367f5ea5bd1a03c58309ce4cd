@@ -1,0 +1,42 @@
+src/benchmark_diagnosis/runner.py
+  s_daea27242bd804::t_d6763195216883 471-477
+config/default.yaml
+  s_daea27242bd804::t_d1de46c38b8000 34-46
+src/benchmark_diagnosis/cli.py
+  s_daea27242bd804::t_2a5fe16073d4d6 267-273
+config/run-qwen3-4b-tool-rl.yaml
+  s_daea27242bd804::t_46b27f61334123 21-23
+tests/test_runner.py
+  s_daea27242bd804::t_b7fb6ac33b7215 151-183
+src/benchmark_diagnosis/config.py
+  s_daea27242bd804::t_58f4ec26f37da8 48-60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "133e907f167c5f1367f5ea5bd1a03c58309ce4cd",
+  "prompts": {},
+  "sessions": {
+    "s_daea27242bd804": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a88134b3286b8e10f3d3921",
+        "model": "qwen3.8-max"
+      },
+      "human_author": "lvhaoyu <lvhaoyu@huawei.com>",
+      "custom_attributes": {
+        "operation_id": "6a8816b13286b8e10f3d3968",
+        "edit_kind": "file_edit",
+        "source_scene": "agent",
+        "tool_type": "builtin",
+        "runtime_client": "trae-tob-git-ai",
+        "client_type": "ide",
+        "tool_id": "icube:applyChatSnapshotPatch",
+        "external_session_id": "6a88134b3286b8e10f3d3921",
+        "tool_use_id": "6a8816b13286b8e10f3d3968",
+        "session_id": "6a88134b3286b8e10f3d3921",
+        "dedupe_key": "6a88134b3286b8e10f3d3921:6a8816b13286b8e10f3d3968:afterEdit:70dea344"
+      }
+    }
+  }
+}
