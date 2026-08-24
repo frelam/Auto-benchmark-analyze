@@ -315,10 +315,13 @@ def test_execute_run_benchmarks_subset_limits_eval_tasks(run_env):
         wait_ready=lambda _: True,
         run_harness=fake_harness,
     )
-    # Only the requested subset is sent to the harness.
-    assert len(captured) == 1
-    tasks_idx = captured[0].index("--tasks") + 1
-    tasks = captured[0][tasks_idx].split(",")
+    # Only the requested subset reaches the harness — one command per benchmark
+    # (evaluated one at a time so each dataset's score prints on completion).
+    tasks = set()
+    for cmd in captured:
+        tasks_idx = cmd.index("--tasks") + 1
+        tasks.update(cmd[tasks_idx].split(","))
+    assert len(captured) == 3
     assert set(tasks) == {"mmlu_pro", "math", "swe_bench"}
 
 
@@ -344,11 +347,13 @@ def test_execute_run_repeats_sampling_forwards_to_harness(run_env):
         wait_ready=lambda _: True,
         run_harness=fake_harness,
     )
-    assert len(captured) == 1
-    assert captured[0][captured[0].index("--repeats") + 1] == "5"
-    assert captured[0][captured[0].index("--gen_kwargs") + 1] == (
-        "temperature=0.7,top_p=0.95"
-    )
+    # Sampling flags forward on every per-benchmark command.
+    assert captured
+    for cmd in captured:
+        assert cmd[cmd.index("--repeats") + 1] == "5"
+        assert cmd[cmd.index("--gen_kwargs") + 1] == (
+            "temperature=0.7,top_p=0.95"
+        )
 
 
 def test_execute_run_fails_fast_on_forced_llm_without_model(run_env):

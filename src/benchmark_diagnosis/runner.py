@@ -29,7 +29,6 @@ from pathlib import Path
 from typing import Any, Literal
 
 from rich.console import Console
-from rich.table import Table
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -46,6 +45,7 @@ from benchmark_diagnosis.evaluation_orchestration.harness_bridge import (
     build_command,
     extract_scores,
     run_eval,
+    task_headline,
 )
 from benchmark_diagnosis.pipeline import _revive_curves, build_offline, diagnose_model
 from benchmark_diagnosis.reporting.report_generator import render_json, render_markdown
@@ -551,33 +551,51 @@ def _collect_scores(
     if not tasks:
         console.print("[yellow]No benchmarks to evaluate; skipping eval.[/]")
         return {}, {}
-    cmd = build_command(
-        request.model,
-        tasks,
-        base_url=base_url,
-        num_fewshot=settings.evaluation.num_fewshot,
-        batch_size=settings.evaluation.batch_size,
-        limit=settings.evaluation.limit,
-        output_dir=Path(settings.evaluation.output_dir),
-        harness_cmd=settings.evaluation.harness_cmd,
-        tokenizer=settings.evaluation.tokenizer,
-        max_gen_toks=settings.evaluation.max_gen_toks,
-        num_concurrent=settings.evaluation.num_concurrent,
-        max_length=settings.evaluation.max_length,
-        timeout=settings.evaluation.timeout,
-        confirm_run_unsafe_code=settings.evaluation.confirm_run_unsafe_code,
-        apply_chat_template=settings.evaluation.apply_chat_template,
-        repeats=settings.evaluation.repeats,
-        gen_kwargs=settings.evaluation.gen_kwargs,
-    )
+
+    def _cmd(task: str) -> list[str]:
+        return build_command(
+            request.model,
+            [task],
+            base_url=base_url,
+            num_fewshot=settings.evaluation.num_fewshot,
+            batch_size=settings.evaluation.batch_size,
+            limit=settings.evaluation.limit,
+            output_dir=Path(settings.evaluation.output_dir),
+            harness_cmd=settings.evaluation.harness_cmd,
+            tokenizer=settings.evaluation.tokenizer,
+            max_gen_toks=settings.evaluation.max_gen_toks,
+            num_concurrent=settings.evaluation.num_concurrent,
+            max_length=settings.evaluation.max_length,
+            timeout=settings.evaluation.timeout,
+            confirm_run_unsafe_code=settings.evaluation.confirm_run_unsafe_code,
+            apply_chat_template=settings.evaluation.apply_chat_template,
+            repeats=settings.evaluation.repeats,
+            gen_kwargs=settings.evaluation.gen_kwargs,
+        )
+
     if request.benchmarks:
         console.print(f"[cyan]Evaluating {len(tasks)} benchmark(s)[/] (subset: {','.join(tasks)})")
     else:
         console.print(f"[cyan]Evaluating {len(tasks)} benchmark(s)[/] (full portfolio)")
-    console.print("[dim]  " + " ".join(cmd) + "[/]")
-    results = run_harness(cmd)
-    raw_scores = extract_scores(results)
-    _print_scores(raw_scores)
+
+    # Evaluate one dataset per harness run and print its score as soon as it
+    # finishes, instead of waiting for the whole portfolio (lm-eval only writes
+    # a results.json once every task completes). Per-run payloads are merged so
+    # downstream bad-case archiving sees the same combined results as before.
+    raw_scores: dict[str, float] = {}
+    results: dict[str, Any] = {}
+    for i, task in enumerate(tasks, 1):
+        cmd = _cmd(task)
+        console.print(f"[cyan][{i}/{len(tasks)}] Evaluating {task}[/]")
+        console.print("[dim]  " + " ".join(cmd) + "[/]")
+        task_results = run_harness(cmd)
+        entries = task_results.get("results") or {}
+        results.setdefault("results", {}).update(entries)
+        groups = task_results.get("groups")
+        if isinstance(groups, dict):
+            results.setdefault("groups", {}).update(groups)
+        raw_scores.update(extract_scores(task_results))
+        _print_task_score(task, task_results)
     return raw_scores, results
 
 
@@ -691,12 +709,11 @@ def _relpath(path: Path, anchor: Path) -> str:
         return path.as_posix()
 
 
-def _print_scores(scores: dict[str, float]) -> None:
-    if not scores:
+def _print_task_score(task: str, task_results: dict[str, Any]) -> None:
+    """Print a single dataset's score the moment its harness run returns."""
+    headline = task_headline(task_results, task)
+    if headline is None:
+        console.print(f"[green]✔ {task}[/]  (no computable metric)")
         return
-    table = Table(title="Evaluation scores")
-    table.add_column("task", style="cyan")
-    table.add_column("score", justify="right")
-    for task, score in sorted(scores.items()):
-        table.add_row(task, f"{score:.4f}")
-    console.print(table)
+    metric, score = headline
+    console.print(f"[green]✔ {task}[/]  {metric} = {score:.4f}")
