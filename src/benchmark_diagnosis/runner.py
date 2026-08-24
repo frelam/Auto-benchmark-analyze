@@ -36,6 +36,9 @@ from benchmark_diagnosis.config import Settings, resolve_advisor_mode
 from benchmark_diagnosis.core import db
 from benchmark_diagnosis.core.schema import ModelRecord
 from benchmark_diagnosis.data import ingestion, queries
+from benchmark_diagnosis.evaluation_orchestration.chat_template_patch import (
+    prepare_chat_template_eval,
+)
 from benchmark_diagnosis.evaluation_orchestration.deploy import (
     serve_command,
     wait_until_ready,
@@ -46,6 +49,9 @@ from benchmark_diagnosis.evaluation_orchestration.harness_bridge import (
     extract_scores,
     run_eval,
     task_headline,
+)
+from benchmark_diagnosis.evaluation_orchestration.task_registry import (
+    to_lm_eval_task_list,
 )
 from benchmark_diagnosis.pipeline import _revive_curves, build_offline, diagnose_model
 from benchmark_diagnosis.reporting.report_generator import render_json, render_markdown
@@ -552,6 +558,28 @@ def _collect_scores(
         console.print("[yellow]No benchmarks to evaluate; skipping eval.[/]")
         return {}, {}
 
+    # The harness only knows lm-eval task names: benchmark ids that differ
+    # (math -> hendrycks_math, longbench_v2 -> longbench2, ...) must be
+    # translated or the run dies with "Tasks not found" before evaluating.
+    lm_eval_tasks = to_lm_eval_task_list(tasks)
+    renamed = [
+        (orig, mapped)
+        for orig, mapped in zip(tasks, lm_eval_tasks, strict=True)
+        if orig != mapped
+    ]
+    if renamed:
+        console.print(
+            "[dim]task aliases: "
+            + ", ".join(f"{a} -> {b}" for a, b in renamed)
+            + "[/]"
+        )
+
+    # Chat models (apply_chat_template) need the venv task templates adapted
+    # (bbh/humaneval until + max_gen_toks): best-effort, never fails the run.
+    if settings.evaluation.apply_chat_template:
+        for line in prepare_chat_template_eval(settings, lm_eval_tasks):
+            console.print(line)
+
     def _cmd(task: str) -> list[str]:
         return build_command(
             request.model,
@@ -574,9 +602,15 @@ def _collect_scores(
         )
 
     if request.benchmarks:
-        console.print(f"[cyan]Evaluating {len(tasks)} benchmark(s)[/] (subset: {','.join(tasks)})")
+        console.print(
+            f"[cyan]Evaluating {len(lm_eval_tasks)} benchmark(s)[/] "
+            f"(subset: {','.join(lm_eval_tasks)})"
+        )
     else:
-        console.print(f"[cyan]Evaluating {len(tasks)} benchmark(s)[/] (full portfolio)")
+        console.print(
+            f"[cyan]Evaluating {len(lm_eval_tasks)} benchmark(s)[/] "
+            "(full portfolio)"
+        )
 
     # Evaluate one dataset per harness run and print its score as soon as it
     # finishes, instead of waiting for the whole portfolio (lm-eval only writes
@@ -584,9 +618,9 @@ def _collect_scores(
     # downstream bad-case archiving sees the same combined results as before.
     raw_scores: dict[str, float] = {}
     results: dict[str, Any] = {}
-    for i, task in enumerate(tasks, 1):
+    for i, task in enumerate(lm_eval_tasks, 1):
         cmd = _cmd(task)
-        console.print(f"[cyan][{i}/{len(tasks)}] Evaluating {task}[/]")
+        console.print(f"[cyan][{i}/{len(lm_eval_tasks)}] Evaluating {task}[/]")
         console.print("[dim]  " + " ".join(cmd) + "[/]")
         task_results = run_harness(cmd)
         entries = task_results.get("results") or {}

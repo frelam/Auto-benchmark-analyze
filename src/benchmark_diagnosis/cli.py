@@ -26,6 +26,9 @@ from benchmark_diagnosis.config import Settings, load_config
 from benchmark_diagnosis.core import db
 from benchmark_diagnosis.core.schema import ModelRecord
 from benchmark_diagnosis.data import ingestion, queries
+from benchmark_diagnosis.evaluation_orchestration.chat_template_patch import (
+    prepare_chat_template_eval,
+)
 from benchmark_diagnosis.evaluation_orchestration.deploy import (
     serve_command,
     wait_until_ready,
@@ -34,6 +37,9 @@ from benchmark_diagnosis.evaluation_orchestration.harness_bridge import (
     build_command,
     extract_scores,
     run_eval,
+)
+from benchmark_diagnosis.evaluation_orchestration.task_registry import (
+    to_lm_eval_task_list,
 )
 from benchmark_diagnosis.pipeline import build_offline
 from benchmark_diagnosis.reporting import visualize as viz
@@ -263,10 +269,30 @@ def eval_model(
             session.close()
     else:
         task_list = tasks.split(",")
+    # The harness only knows lm-eval task names: portfolio benchmark ids that
+    # differ (math -> hendrycks_math, longbench_v2 -> longbench2, ...) must be
+    # translated or the run dies with "Tasks not found" before evaluating.
+    lm_eval_tasks = to_lm_eval_task_list(task_list)
+    renamed = [
+        (orig, mapped)
+        for orig, mapped in zip(task_list, lm_eval_tasks, strict=True)
+        if orig != mapped
+    ]
+    if renamed:
+        console.print(
+            "[dim]task aliases: "
+            + ", ".join(f"{a} -> {b}" for a, b in renamed)
+            + "[/]"
+        )
+    # Chat models (apply_chat_template) need the venv task templates adapted
+    # (bbh/humaneval until + max_gen_toks): best-effort, never fails the run.
+    if settings.evaluation.apply_chat_template:
+        for line in prepare_chat_template_eval(settings, lm_eval_tasks):
+            console.print(line)
     output_dir = Path(settings.evaluation.output_dir)
     cmd = build_command(
         model,
-        task_list,
+        lm_eval_tasks,
         base_url=base_url,
         num_fewshot=settings.evaluation.num_fewshot,
         batch_size=settings.evaluation.batch_size,
@@ -415,9 +441,17 @@ def eval_task_cmd(
     out_dir = out or Path(settings.evaluation.output_dir) / (
         f"eval_task_{dt.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
     )
+    # Accept benchmark ids (math/longbench_v2) as well as lm-eval task names;
+    # the harness only knows the latter.
+    lm_eval_tasks = to_lm_eval_task_list([task])
+    if lm_eval_tasks != [task]:
+        console.print(f"[dim]task alias: {task} -> {lm_eval_tasks[0]}[/]")
+    if settings.evaluation.apply_chat_template:
+        for line in prepare_chat_template_eval(settings, lm_eval_tasks):
+            console.print(line)
     cmd = build_command(
         model or task,
-        [task],
+        lm_eval_tasks,
         base_url=base_url,
         num_fewshot=settings.evaluation.num_fewshot,
         batch_size=settings.evaluation.batch_size,

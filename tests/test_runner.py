@@ -154,13 +154,16 @@ def test_execute_run_benchmark_mode_writes_scores_and_skips_diagnosis(run_env):
     assert result.report["scores"] == {"mmlu_pro": 0.5, "math": 0.4, "swe_bench": 0.18}
 
 
-def test_execute_run_passes_evaluation_config_to_harness(run_env):
+def test_execute_run_passes_evaluation_config_to_harness(run_env, tmp_path):
     settings, tmp_path, scores_path = run_env
     settings.evaluation.tokenizer = "/models/qwen3"
     settings.evaluation.max_gen_toks = 16384
     settings.evaluation.timeout = 7200
     settings.evaluation.confirm_run_unsafe_code = True
     settings.evaluation.apply_chat_template = True
+    # Point the harness at a non-existent venv so the chat-template patch
+    # resolves nowhere — tests must never write into the real lm_eval install.
+    settings.evaluation.harness_cmd = str(tmp_path / "venv" / "bin" / "lm_eval")
     request = RunRequest(
         model="llama-3-8b", mode="benchmark", source="weights",
         weights="meta-llama/Llama-3-8B",
@@ -317,12 +320,61 @@ def test_execute_run_benchmarks_subset_limits_eval_tasks(run_env):
     )
     # Only the requested subset reaches the harness — one command per benchmark
     # (evaluated one at a time so each dataset's score prints on completion).
+    # Benchmark ids are translated to lm-eval task names (math -> hendrycks_math);
+    # non-evaluable ids (swe_bench) pass through and fail in the harness.
     tasks = set()
     for cmd in captured:
         tasks_idx = cmd.index("--tasks") + 1
         tasks.update(cmd[tasks_idx].split(","))
     assert len(captured) == 3
-    assert set(tasks) == {"mmlu_pro", "math", "swe_bench"}
+    assert set(tasks) == {"mmlu_pro", "hendrycks_math", "swe_bench"}
+
+
+def test_execute_run_translates_aliases_and_patches_chat_templates(run_env, tmp_path):
+    """math/longbench_v2 must reach the harness as hendrycks_math/longbench2,
+    and with apply_chat_template the venv bbh template is adapted in place."""
+    venv = tmp_path / "venv"
+    (venv / "bin").mkdir(parents=True)
+    (venv / "bin" / "lm_eval").write_text("#!/bin/sh\n", encoding="utf-8")
+    site = venv / "lib" / "python3.11" / "site-packages"
+    bbh_yaml = site / "lm_eval" / "tasks" / "bbh" / "cot_fewshot" / "_cot_fewshot_template_yaml"
+    bbh_yaml.parent.mkdir(parents=True)
+    bbh_yaml.write_text(
+        "generation_kwargs:\n  max_gen_toks: 1024\n  until:\n"
+        '    - "</s>"\n    - "Q"\n    - "\\n\\n"\n  do_sample: false\n',
+        encoding="utf-8",
+    )
+
+    settings, tmp_path, scores_path = run_env
+    settings.evaluation.harness_cmd = str(venv / "bin" / "lm_eval")
+    settings.evaluation.apply_chat_template = True
+    settings.evaluation.tokenizer = "/models/qwen3"
+    settings.evaluation.max_gen_toks = 16384
+    request = RunRequest(
+        model="qwen3-4b",
+        source="weights",
+        weights="qwen3-4b",
+        benchmarks=["math", "longbench_v2", "bbh"],
+    )
+    captured: list[list[str]] = []
+
+    def fake_harness(cmd):
+        captured.append(cmd)
+        return {"results": {"bbh": {"exact_match,none": 0.5}}}
+
+    execute_run(
+        settings,
+        request,
+        deploy_weights=lambda cmd: _StubProc(),
+        wait_ready=lambda _: True,
+        run_harness=fake_harness,
+    )
+    names = {cmd[cmd.index("--tasks") + 1] for cmd in captured}
+    assert names == {"hendrycks_math", "longbench2", "bbh"}
+    patched = bbh_yaml.read_text(encoding="utf-8")
+    assert 'until:\n    - "<|im_end|>"' in patched
+    assert "max_gen_toks: 16384" in patched
+    assert '"Q"' not in patched
 
 
 def test_execute_run_repeats_sampling_forwards_to_harness(run_env):

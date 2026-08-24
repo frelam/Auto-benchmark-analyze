@@ -55,6 +55,18 @@ def to_lm_eval_task(benchmark_id: str) -> str | None:
     return None
 
 
+def to_lm_eval_task_list(benchmark_ids: list[str]) -> list[str]:
+    """Translate benchmark ids to lm-eval task names (unknown ids pass through).
+
+    The evaluation path (``run`` / ``eval`` / ``eval-task``) passes task names
+    straight to the harness CLI, which only knows lm-eval names (``math`` ->
+    ``hendrycks_math``, ``longbench_v2`` -> ``longbench2``, ...). Without this
+    translation a portfolio/CLI benchmark id that differs from the harness name
+    fails with ``Tasks not found`` before evaluation starts.
+    """
+    return [to_lm_eval_task(bid) or bid for bid in benchmark_ids]
+
+
 def is_evaluable(benchmark_id: str) -> bool:
     return to_lm_eval_task(benchmark_id) is not None
 

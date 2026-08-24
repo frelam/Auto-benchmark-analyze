@@ -18,6 +18,19 @@ and only writing the parts that are unique to this project.
   the CLI is the stable contract.
 - **Item-level data**: `--log_samples` / `samples_*.jsonl` gives per-example results,
   which feed the mIRT module (section 2 of the design doc).
+- **Benchmark id translation**: the registry (`evaluation_orchestration/task_registry.py`)
+  maps the tool's benchmark ids to lm-eval 0.4.12 task names (`math` →
+  `hendrycks_math`, `longbench_v2` → `longbench2`, ...); `run` / `eval` /
+  `eval-task` translate before building the harness argv.
+- **Chat-template compatibility patches**: lm-eval 0.4.12 task templates are written
+  for base models — `bbh`'s `until` contains `"\n\n"` (truncates a Qwen3-style
+  `<think>…</think>` answer before it starts, ~0% scores) and several templates cap
+  `max_gen_toks` below what long CoT needs (task-level overrides model args).
+  When `apply_chat_template` is on, `evaluation_orchestration/chat_template_patch.py`
+  idempotently rewrites the venv templates of the tasks being evaluated
+  (`bbh`/`humaneval`/`ifeval`: `until` → chat EOS, `max_gen_toks` → configured value,
+  humaneval filters the thinking block / markdown fences out of completions).
+  Best-effort: an unresolvable venv only logs a warning, never fails the run.
 
 ## 2. Weight deployment — reuse `vLLM`
 
