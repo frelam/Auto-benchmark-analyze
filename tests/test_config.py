@@ -5,7 +5,12 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from benchmark_diagnosis.config import Settings, load_config, resolve_advisor_mode
+from benchmark_diagnosis.config import (
+    Settings,
+    load_config,
+    resolve_advisor_mode,
+    resolve_diagnosis_engine,
+)
 
 
 def test_defaults_include_run_and_advisor() -> None:
@@ -15,6 +20,58 @@ def test_defaults_include_run_and_advisor() -> None:
     assert settings.run.model.name is None
     assert settings.run.model.source is None
     assert settings.recommendation.advisor_mode == "auto"
+
+
+def test_diagnosis_disabled_by_default() -> None:
+    settings = load_config()
+    assert settings.diagnosis.enabled is False
+    assert settings.diagnosis.engine == "rule"
+    assert settings.diagnosis.llm_agent.enabled is False
+    assert settings.diagnosis.llm_agent.harness_cmd is None
+    assert settings.diagnosis.llm_agent.interact_cmd is None
+
+
+def test_diagnosis_engine_rejects_bogus_literal() -> None:
+    with pytest.raises(ValidationError):
+        Settings(diagnosis={"engine": "magic"})
+
+
+def test_resolve_engine_rule_default_and_requested() -> None:
+    config = Settings()
+    assert resolve_diagnosis_engine(config) == "rule"
+    assert resolve_diagnosis_engine(config, requested="rule") == "rule"
+
+
+def test_resolve_engine_llm_agent_requires_full_config() -> None:
+    config = Settings(diagnosis={"engine": "llm_agent"})
+    with pytest.raises(ValueError, match="llm_agent"):
+        resolve_diagnosis_engine(config, requested="llm_agent")
+    # switch alone is not enough
+    config = Settings(
+        diagnosis={
+            "engine": "llm_agent",
+            "llm_agent": {"enabled": True},
+        }
+    )
+    with pytest.raises(ValueError, match="harness_cmd"):
+        resolve_diagnosis_engine(config, requested="llm_agent")
+    # switch + start + interact commands -> usable
+    config = Settings(
+        diagnosis={
+            "engine": "llm_agent",
+            "llm_agent": {
+                "enabled": True,
+                "harness_cmd": "dsh run {case_pack}",
+                "interact_cmd": "dsh send {message}",
+            },
+        }
+    )
+    assert resolve_diagnosis_engine(config, requested="llm_agent") == "llm_agent"
+
+
+def test_resolve_engine_rejects_bogus() -> None:
+    with pytest.raises(ValueError, match="unknown diagnosis engine"):
+        resolve_diagnosis_engine(Settings(), requested="magic")
 
 
 def test_run_mode_rejects_bogus_literal() -> None:

@@ -10,6 +10,7 @@ import dataclasses
 import datetime as dt
 import enum
 import math
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -237,14 +238,27 @@ def diagnose_model(
     cases: list[dict] | None = None,
     mode: str = "full",
     advisor_mode: str = "auto",
+    engine: str = "rule",
+    base_url: str | None = None,
+    bad_cases_dir: Any = None,
+    output_dir: Any = None,
 ) -> dict[str, Any]:
-    """Run the unified diagnosis pipeline and return a report dict.
+    """Run the diagnosis pipeline for the requested engine and return a report dict.
 
-    The pipeline is the stages 1-7 chain (design doc v2), preceded by a Stage 0
-    cluster-verdict aggregation that feeds per-benchmark verdicts into Stage 1.
-    Stages 1-7 degrade gracefully when their preconditions are absent (no probe
-    -> NO_PROBE list, no LLM -> deterministic Stage 6, no item tags -> coarse
-    Stage 1, no cases -> Stage 3 skipped).
+    ``engine`` selects the diagnosis path (design: engines doc):
+
+    * ``rule`` (default) — deterministic rule-base engine (2.1): low-score
+      filtering vs same-params/active-params percentiles -> dataset-capability
+      mapping -> missing capabilities -> capability-dataset suggestions.
+    * ``llm_agent`` — rule base first (its conclusions are adopted), then the
+      harness loop (2.2): bad-case analysis + analysis->verification->new-
+      hypothesis iterations with the eval tool, until a final conclusion.
+      Requires ``diagnosis.llm_agent`` (switch + harness start/interact
+      commands) — misconfiguration fails fast.
+    * ``legacy`` — the previous stages 1-7 intelligent pipeline
+      (``intelligent_diagnosis`` package), kept for back-compatibility.
+
+    All engines share the Stage 0 cluster-verdict aggregation (``clusters``).
 
     Args:
         session: DB session (offline assets must already exist).
@@ -252,21 +266,30 @@ def diagnose_model(
         raw_scores: Mapping benchmark_id -> score for the evaluated model.
         config: Settings.
         cases: Optional failed-case samples (``{question, model_output, gold}``)
-            for Stage 3 guided bad-case analysis. When None, case evidence empty.
-        mode: ``"full"`` (analysis + Stage 6 suggestions) or ``"analyze"``
-            (analysis only; Stage 6 suggestions are omitted).
-        advisor_mode: Requested advisor mode (``auto``/``llm_rules``/``rules``),
-            resolved against ``config`` via :func:`resolve_advisor_mode`.
-            ``rules`` disables the analyst LLM (Stage 3 + Stage 6 LLM skipped).
+            for the legacy Stage 3 guided bad-case analysis.
+        mode: ``"full"`` (analysis + suggestions) or ``"analyze"`` (analysis
+            only; the final suggestion/conclusion write-up is omitted).
+        advisor_mode: Requested advisor mode (legacy engine only).
+        engine: ``rule`` / ``llm_agent`` / ``legacy`` (default ``rule``).
+        base_url: Served model endpoint (llm-agent dataset verification).
+        bad_cases_dir: The archived ``bad_cases/`` directory (llm-agent pack).
+        output_dir: Run output dir (the llm-agent case pack lives under it).
 
     Returns:
-        A structured report dict suitable for ``reporting.render_markdown``. The
-        ``clusters`` field carries Stage 0 per-cluster verdicts; the ``diagnosis``
-        field carries the unified stages 1-7 output (candidates, verdicts,
-        priorities, suggestions).
+        A structured report dict suitable for ``reporting.render_markdown``:
+        ``clusters`` carries Stage 0 per-cluster verdicts; ``diagnosis``
+        carries the engine's block.
     """
     if mode not in ("analyze", "full"):
         raise ValueError(f"unknown mode {mode!r}; expected analyze|full")
+    if engine not in ("rule", "llm_agent", "legacy"):
+        raise ValueError(
+            f"unknown diagnosis engine {engine!r}; expected rule|llm_agent|legacy"
+        )
+    if engine == "llm_agent":
+        from benchmark_diagnosis.config import resolve_diagnosis_engine
+
+        resolve_diagnosis_engine(config, "llm_agent")  # fail fast on bad config
     advisor_mode = resolve_advisor_mode(config, advisor_mode)
 
     portfolios = _revive_portfolios(db.load_latest_asset(session, "portfolio") or [])
@@ -276,10 +299,9 @@ def diagnose_model(
     curves_version = _latest_version(session, "curves")
     experience_version = _latest_version(session, "experience")
 
-    llm = None if advisor_mode == "rules" else _make_analyst_llm(config)
     c_scores = cluster_scores(raw_scores, portfolios)
 
-    # ---- Stage 0: per-cluster verdict aggregation (also feeds Stage 1) ----
+    # ---- Stage 0: per-cluster verdict aggregation (shared by all engines) ----
     clusters: list[dict] = []
     per_benchmark_verdicts: dict[str, dict] = {}
     for pf in portfolios:
@@ -307,21 +329,61 @@ def diagnose_model(
             }
         )
 
-    # ---- Stages 1-7: unified intelligent diagnosis ----
-    from benchmark_diagnosis.intelligent_diagnosis.orchestrator import (
-        run_intelligent_diagnosis,
-    )
+    # ---- Engine dispatch ----
+    if engine == "legacy":
+        from benchmark_diagnosis.intelligent_diagnosis.orchestrator import (
+            run_intelligent_diagnosis,
+        )
 
-    diagnosis_block = run_intelligent_diagnosis(
-        session=session,
-        verdict_benchmarks=list(per_benchmark_verdicts.values()),
-        model=model,
-        raw_scores=raw_scores,
-        config=config,
-        llm=llm,
-        cases=cases,
-        mode=mode,
-    )
+        llm = None if advisor_mode == "rules" else _make_analyst_llm(config)
+        diagnosis_block = run_intelligent_diagnosis(
+            session=session,
+            verdict_benchmarks=list(per_benchmark_verdicts.values()),
+            model=model,
+            raw_scores=raw_scores,
+            config=config,
+            llm=llm,
+            cases=cases,
+            mode=mode,
+        )
+    else:
+        from benchmark_diagnosis.diagnosis_engine.rule_base import run_rule_base
+
+        rule_result = run_rule_base(
+            session=session, model=model, raw_scores=raw_scores, config=config
+        )
+        rule_block = dataclasses.asdict(rule_result)
+        if mode == "analyze":
+            # analyze = 归因但不给最终建议（与 legacy 的 Stage 6 语义一致）。
+            rule_block["dataset_suggestions"] = []
+        if engine == "rule":
+            diagnosis_block = {"engine": "rule", "rule_base": rule_block}
+        else:
+            from benchmark_diagnosis.diagnosis_engine.llm_agent import (
+                run_llm_agent_diagnosis,
+            )
+
+            agent_result = run_llm_agent_diagnosis(
+                session=session,
+                model=model,
+                raw_scores=raw_scores,
+                config=config,
+                rule_result=rule_block,
+                output_dir=output_dir or Path(config.run.output.dir),
+                base_url=base_url,
+                bad_cases_dir=bad_cases_dir,
+            )
+            agent_block = dataclasses.asdict(agent_result)
+            if mode == "analyze" and agent_block.get("conclusion"):
+                agent_block["conclusion"] = {
+                    **agent_block["conclusion"],
+                    "suggestions": [],
+                }
+            diagnosis_block = {
+                "engine": "llm_agent",
+                "rule_base": rule_block,
+                "agent": agent_block,
+            }
 
     return {
         "model": {
@@ -334,6 +396,7 @@ def diagnose_model(
         },
         "generated_at": dt.datetime.utcnow().isoformat(),
         "mode": mode,
+        "engine": engine,
         "advisor_mode": advisor_mode,
         "versions": {
             "coverage_version": coverage_version,

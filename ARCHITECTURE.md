@@ -57,11 +57,26 @@ and only writing the parts that are unique to this project.
 - Residuals are converted to a **local percentile / z-score** (not absolute deltas) and
   compared against configurable thresholds (default p25 / z < −1).
 
-## 6. Diagnosis — fixed taxonomy, LLM-as-analyst
+## 6. Diagnosis — two engines, opt-in (design doc v3)
 
-- `diagnosis/label_slicing.py` aggregates eval logs by declared subcategory first (cheap).
-- `diagnosis/failure_mode_analyst.py` classifies sampled failures into a **fixed taxonomy**
-  (never free-form labels) so cross-run trends aggregate.
+- Diagnosis is **off by default**: `run` always archives eval results + bad cases
+  (`evaluation_orchestration/artifacts.py` — `scores.json` / `eval_results.json` /
+  `eval_summary.md` / `bad_cases/`), and the engines run only with `--diagnose` /
+  `diagnosis.enabled: true`.
+- **Rule base** (`diagnosis_engine/rule_base.py`): deterministic, no LLM —
+  low-score filtering against same-params / same-active-params expectation
+  percentiles (`expectation_curves.judge`), dataset→capability mapping from the
+  coverage asset (flat tags resolved through the taxonomy aliases), missing
+  capability filtering (noise floor + ancestor collapse), capability→dataset
+  suggestions from the experience base + probe registry.
+- **LLM agent base** (`diagnosis_engine/llm_agent.py`): rule base first, then a
+  harness loop — the tool assembles a case pack (`<output>/agent_run/`), launches
+  the harness with the configured `harness_cmd`, sends follow-up rounds via
+  `interact_cmd`, and collects `output/conclusion.json`. The agent's workflow
+  ships as a skill (`skills/benchmark-diagnosis/SKILL.md`, packaged copy under
+  `diagnosis_engine/skill/`); dataset verification uses the `eval-task` CLI.
+- The v2 stages 1-7 pipeline (`intelligent_diagnosis/`) is retained as
+  `engine="legacy"` for back-compatibility.
 
 ## 7. Recommendation — grounded, not free-form
 
@@ -71,12 +86,14 @@ and only writing the parts that are unique to this project.
   `groundedness_check.py` post-processor verifies every cited rule id and number exists in
   the evidence set (section 6.4).
 
-## 8. Intelligent diagnosis — stages 1-7 (design doc v2)
+## 8. Intelligent diagnosis — stages 1-7 (design doc v2, legacy)
 
 - `intelligent_diagnosis/` implements the v2 pipeline (see
   `docs/intelligent-diagnosis-v2-design.md`): candidate generation →
   probe verification → guided bad-case analysis → confidence fusion →
   priority scoring → suggestion write-up → feedback loop.
+  Reached via `diagnose_model(..., engine="legacy")` only; the default engines
+  are the v3 rule-base / llm-agent paths (section 6 above).
 - **Reuses** the Stage-0 assets (`curves`/`coverage`/`portfolio`), `judge()`
   below-expectation logic, and the historical item-level scores from the DB;
   item-level capability tags (`item_capabilities`) come from the benchmark
@@ -97,13 +114,13 @@ src/benchmark_diagnosis/
 ├── data/            # ingestion + queries + seed reference data
 ├── capability_analysis/   # factor_analysis, mirt_fit, coverage_table, design_goal_validation
 ├── representative_selection/  # portfolio_selector
-├── evaluation_orchestration/  # harness_bridge, deploy, screening_runner, expectation_curves, drilldown_trigger
+├── evaluation_orchestration/  # harness_bridge, deploy, screening_runner, expectation_curves,
+│                              # artifacts (scores + bad-case archiving), drilldown_trigger
+├── diagnosis_engine/  # v3 engines: rule_base (2.1), llm_agent (2.2) + skill/
 ├── diagnosis/       # label_slicing, failure_mode_analyst
-├── recommendation/  # rule_base, retrieval, synthesizer, groundedness_check
-├── intelligent_diagnosis/  # stages 1-7: candidate_generation, probe_registry,
-│                           # guided_case_analyzer, confidence_fusion,
-│                           # priority_scorer, suggestion_writer, feedback, orchestrator
-└── reporting/       # report_generator
+├── recommendation/  # rule_base, retrieval, synthesizer, groundedness_check, experience_base
+├── intelligent_diagnosis/  # legacy stages 1-7 (engine="legacy")
+└── reporting/       # report_generator, visualize
 ```
 
 ## Dependency tiers

@@ -98,13 +98,22 @@ def _print_result(result: RunResult) -> None:
             f"served={result.served})"
         )
         return
+    if result.report.get("diagnosed") is False:
+        console.print(f"[green]Evaluation summary written to {result.report_path}[/]")
+        console.print(f"[green]Eval results written to {result.metrics_path}[/]")
+        console.print(
+            "[cyan]Diagnosis skipped[/] (enable with --diagnose or "
+            "diagnosis.enabled: true)"
+        )
+        return
     clusters = result.report.get("clusters", [])
     n_under = sum(1 for c in clusters if c.get("underperforming"))
+    engine = result.report.get("engine", "rule")
     console.print(f"[green]Report written to {result.report_path}[/]")
     console.print(f"[green]Metrics written to {result.metrics_path}[/]")
     console.print(
         f"[cyan]{len(clusters)} cluster(s) analysed, {n_under} under-performing[/] "
-        f"(mode={result.mode}, advisor={result.advisor_mode}, "
+        f"(mode={result.mode}, engine={engine}, advisor={result.advisor_mode}, "
         f"figures={len(result.figure_paths)})"
     )
 
@@ -304,6 +313,17 @@ def run(
     advisor_mode: str = typer.Option(
         None, "--advisor-mode", help="auto | llm_rules | rules (default auto).",
     ),
+    diagnose: bool = typer.Option(
+        None, "--diagnose",
+        help="Run the diagnosis engines after evaluation (default: "
+             "diagnosis.enabled in the config, which is false).",
+    ),
+    engine: str = typer.Option(
+        None, "--engine",
+        help="Diagnosis path: rule (default, deterministic) | llm_agent "
+             "(rule base + bad-case analysis + harness loop; requires "
+             "diagnosis.llm_agent.enabled + harness_cmd + interact_cmd).",
+    ),
     arch: str = typer.Option(None, "--arch", help="dense|moe (new model)."),
     params: float = typer.Option(None, "--params", help="Parameter count in billions."),
     release_date: str = typer.Option(None, "--release-date", help="ISO date."),
@@ -317,17 +337,20 @@ def run(
         None, "--output", help="Report output path (default: config run.output.dir/report.md).",
     ),
 ) -> None:
-    """One command: deploy or reuse an endpoint, evaluate, diagnose, advise.
+    """One command: deploy or reuse an endpoint, evaluate, archive, diagnose.
 
     Exactly one model source must be provided — ``--model-id`` (auto-deploys via
     vLLM), ``--base-url`` (reuse an inference service), or ``--scores`` (a JSON
-    scores file, no evaluation). Source, mode, and advisor can also come from a
-    YAML config via ``--config``. ``--mode`` picks how far the pipeline goes:
-    ``benchmark`` (eval only, writes ``scores.json`` — feed it back with
-    ``--scores``), ``analyze`` (eval + diagnosis, no recommendations), or
-    ``full`` (eval + diagnosis + recommendations, default). The diagnosis in
-    ``analyze``/``full`` always runs the unified stages 1-7 intelligent
-    pipeline; ``--mode analyze`` skips Stage 6 suggestions. ``--benchmarks``
+    scores file, no evaluation). Source and mode can also come from a YAML
+    config via ``--config``. Every run archives its evaluation results + bad
+    cases (``scores.json`` / ``eval_results.json`` / ``eval_summary.md`` /
+    ``bad_cases/``) for manual analysis.
+
+    Diagnosis is opt-in: pass ``--diagnose`` (or set ``diagnosis.enabled:
+    true``) to run the engines, and ``--engine rule|llm_agent`` to pick the
+    path. ``--mode`` picks how far the pipeline goes: ``benchmark`` (eval
+    only), ``analyze`` (eval + diagnosis, no final suggestion write-up), or
+    ``full`` (eval + diagnosis + suggestions, default). ``--benchmarks``
     narrows the evaluation to a subset of the representative portfolio.
     """
     settings: Settings = ctx.obj
@@ -344,6 +367,8 @@ def run(
         scores=scores,
         mode=mode,
         advisor_mode=advisor_mode,
+        diagnose=diagnose,
+        engine=engine,
         arch=arch,
         params=params,
         release_date=release_date,
@@ -351,6 +376,82 @@ def run(
         output=output,
     )
     _print_result(result)
+
+
+@app.command(name="eval-task")
+def eval_task_cmd(
+    ctx: typer.Context,
+    task: str = typer.Argument(..., help="lm-eval task / benchmark id to evaluate."),
+    base_url: str = typer.Option(
+        None, "--base-url", help="OpenAI-compatible /v1 endpoint (default: model as HF id).",
+    ),
+    model: str = typer.Option(
+        None, "--model",
+        help="Model name sent to the endpoint (required with --base-url).",
+    ),
+    limit: int = typer.Option(
+        None, "--limit", help="Cap examples (cheap verification subsets).",
+    ),
+    out: Path = typer.Option(
+        None, "--out",
+        help="Output dir for scores.json + bad_cases/ (default: under "
+             "evaluation.output_dir).",
+    ),
+    live: bool = typer.Option(False, "--live", help="Condense harness progress bars."),
+) -> None:
+    """Evaluate ONE task and archive its scores + bad cases (the eval tool).
+
+    Used by the llm-agent diagnosis loop to verify hypotheses on datasets
+    (design section 2.2): the harness agent runs
+    ``benchmark-diagnosis eval-task --task <id> --limit <N> --base-url <url>
+    --model <model> --out <dir>`` and reads ``<dir>/scores.json`` +
+    ``<dir>/bad_cases/`` to confirm or refute a hypothesis. Results are
+    archived with the same artifact layout as ``run``.
+    """
+    settings: Settings = ctx.obj
+    if base_url and not model:
+        console.print("[red]eval-task with --base-url requires --model.[/]")
+        raise typer.Exit(code=1)
+    out_dir = out or Path(settings.evaluation.output_dir) / (
+        f"eval_task_{dt.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+    )
+    cmd = build_command(
+        model or task,
+        [task],
+        base_url=base_url,
+        num_fewshot=settings.evaluation.num_fewshot,
+        batch_size=settings.evaluation.batch_size,
+        limit=limit,
+        output_dir=out_dir,
+        harness_cmd=settings.evaluation.harness_cmd,
+        tokenizer=settings.evaluation.tokenizer,
+        max_gen_toks=settings.evaluation.max_gen_toks,
+        num_concurrent=settings.evaluation.num_concurrent,
+        max_length=settings.evaluation.max_length,
+        timeout=settings.evaluation.timeout,
+        confirm_run_unsafe_code=settings.evaluation.confirm_run_unsafe_code,
+        apply_chat_template=settings.evaluation.apply_chat_template,
+        repeats=settings.evaluation.repeats,
+        gen_kwargs=settings.evaluation.gen_kwargs,
+    )
+    console.print("[cyan]Running:[/] " + " ".join(cmd))
+    results = run_eval(cmd, live=live, label=task)
+    scores = extract_scores(results)
+    _print_scores(scores)
+
+    from benchmark_diagnosis.evaluation_orchestration.artifacts import (
+        find_sample_files,
+        write_eval_artifacts,
+    )
+
+    artifacts = write_eval_artifacts(
+        out_dir, scores, results, find_sample_files(out_dir)
+    )
+    n_bad = sum(len(v) for v in artifacts.bad_cases.values())
+    console.print(
+        f"[green]Wrote:[/] {artifacts.scores_path} "
+        f"({len(scores)} score(s), {n_bad} bad case(s))"
+    )
 
 
 feedback_app = typer.Typer(

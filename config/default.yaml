@@ -61,6 +61,43 @@ curves:
   min_arch_points: 5            # fall back to unified curve below this many points
 
 diagnosis:
+  # Auto-diagnosis is OFF by default. Evaluation always archives its results
+  # and bad cases; the diagnosis engines below only run when `enabled` is true
+  # (or `run --diagnose` is passed).
+  enabled: false
+  # Which diagnosis path runs:
+  #   rule       -> deterministic rule-base: low-score filtering (same-params /
+  #                 same-active-params percentile) -> dataset-capability mapping
+  #                 -> missing capabilities -> capability-dataset suggestions.
+  #   llm_agent  -> rule base first, then bad-case analysis + a harness loop
+  #                 (hypothesis -> eval/bad-case verification -> new hypothesis)
+  #                 until a final conclusion. Requires llm_agent.* below.
+  engine: rule
+
+  # LLM-agent-base diagnosis. Only usable when ALL THREE are configured:
+  # enabled: true + harness_cmd + interact_cmd.
+  llm_agent:
+    enabled: false
+    # Command that launches the harness agent with the case pack. `{case_pack}`
+    # is replaced with the case-pack directory; alternatively the directory is
+    # exported as BMD_CASE_PACK. Example (deepseek harness):
+    #   harness_cmd: "dsh profile run my-diagnosis-profile --case-pack {case_pack}"
+    harness_cmd: null
+    # Command that sends a follow-up message file to the running harness so it
+    # can iterate further rounds. `{case_pack}` / `{message}` placeholders, or
+    # BMD_CASE_PACK / BMD_MESSAGE env vars.
+    #   interact_cmd: "dsh profile interact my-diagnosis-profile --message {message}"
+    interact_cmd: null
+    # Dataset-verification tool the harness calls inside its loop (the eval
+    # tool). Default: this CLI's own `eval-task` subcommand.
+    eval_cmd: null
+    # Path to the skill directory (SKILL.md workflow) copied into the case
+    # pack. null => the packaged skills/benchmark-diagnosis/ shipped with the
+    # repository.
+    skill_path: null
+    max_rounds: 5           # cap on harness iteration rounds
+    timeout_seconds: 7200   # per-round harness timeout before it is killed
+
   sample_size: 50              # failed cases sampled per low sub-capability
   taxonomy_path: null          # null => packaged taxonomy
 

@@ -1,0 +1,10 @@
+{
+  "mmlu_pro": 50.0,
+  "math": 40.0,
+  "swe_bench": 18.0,
+  "simpleqa": 24.0,
+  "longbench_v2": 38.0,
+  "mmlu": 66.0,
+  "gsm8k": 79.0,
+  "humaneval": 60.0
+}

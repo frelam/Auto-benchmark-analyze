@@ -30,6 +30,11 @@ evaluation:
 recommendation:
   advisor_mode: rules          # deterministic experience-base engine
 
+# 诊断默认关闭；这里显式开启（rule base 路径，确定性统计）。
+diagnosis:
+  enabled: true
+  engine: rule
+
 run:
   mode: full                   # evaluate + diagnose + recommend
   model:

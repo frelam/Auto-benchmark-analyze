@@ -98,6 +98,22 @@ class CapabilityTaxonomy:
     def get(self, capability_id: str) -> CapabilityNode | None:
         return self.nodes.get(capability_id)
 
+    def resolve(self, tag: str) -> str | None:
+        """Map a possibly-alias / flat tag to a canonical capability id.
+
+        Coarse benchmark tags (e.g. ``math``, ``factuality``,
+        ``agentic_tool_use``) resolve through the node ``aliases`` lists into
+        the hierarchy; exact ids pass through unchanged. Returns None when the
+        tag matches nothing.
+        """
+        if tag in self.nodes:
+            return tag
+        lowered = tag.strip().lower()
+        for cid, node in self.nodes.items():
+            if any(str(a).strip().lower() == lowered for a in node.aliases):
+                return cid
+        return None
+
     @property
     def ids(self) -> list[str]:
         return list(self.nodes)

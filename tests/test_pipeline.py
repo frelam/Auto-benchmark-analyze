@@ -47,7 +47,7 @@ def test_build_offline_and_diagnose(seeded_session):
     # the general cluster, swe_bench in the code cluster) so cluster verdicts
     # actually render; scores only count when their benchmark is in a portfolio.
     raw_scores = {"mmlu": 66.6, "math": 55.0, "swe_bench": 18.0}
-    report = diagnose_model(session, model, raw_scores, settings)
+    report = diagnose_model(session, model, raw_scores, settings, engine="legacy")
 
     assert report["model"]["model_id"] == "llama-3-8b"
     assert report["versions"]["coverage_version"] == versions["coverage_version"]
@@ -69,7 +69,7 @@ def test_diagnose_analyze_mode_skips_recommendations(seeded_session):
         active_params=8.0,
     )
     raw_scores = {"mmlu": 66.6, "math": 55.0, "swe_bench": 18.0}
-    report = diagnose_model(session, model, raw_scores, settings, mode="analyze")
+    report = diagnose_model(session, model, raw_scores, settings, mode="analyze", engine="legacy")
 
     assert report["mode"] == "analyze"
     assert report["advisor_mode"] == "rules"  # no analyst LLM configured
@@ -93,7 +93,7 @@ def test_diagnose_reports_quantified_gap(seeded_session):
         active_params=8.0,
     )
     raw_scores = {"mmlu_pro": 50.0, "math": 40.0, "swe_bench": 18.0}
-    report = diagnose_model(session, model, raw_scores, settings)
+    report = diagnose_model(session, model, raw_scores, settings, engine="legacy")
 
     gaps = [
         cluster["diagnosis"]["quantified_gap"]
@@ -108,7 +108,7 @@ def test_diagnose_rejects_unknown_mode(seeded_session):
     session, settings = seeded_session
     model = ModelRecord(model_id="x", name="x", arch_type="dense", total_params=1.0)
     with pytest.raises(ValueError, match="unknown mode"):
-        diagnose_model(session, model, {"mmlu": 50.0}, settings, mode="bogus")
+        diagnose_model(session, model, {"mmlu": 50.0}, settings, mode="bogus", engine="legacy")
 
 
 def test_diagnose_without_offline_assets_returns_empty(seeded_session):
@@ -117,5 +117,5 @@ def test_diagnose_without_offline_assets_returns_empty(seeded_session):
         model_id="x", name="x", arch_type="dense", total_params=1.0, active_params=1.0
     )
     # No offline assets built -> portfolios empty -> no clusters, no crash.
-    report = diagnose_model(session, model, {"mmlu": 50.0}, settings)
+    report = diagnose_model(session, model, {"mmlu": 50.0}, settings, engine="legacy")
     assert report["clusters"] == []

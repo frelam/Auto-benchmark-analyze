@@ -22,7 +22,7 @@ if ! command -v "$BMD" >/dev/null 2>&1; then
   fi
 fi
 
-"$BMD" --config examples/run-from-scores.yaml run
+"$BMD" --config examples/run-from-scores.yaml run --diagnose
 
 echo
 echo "[example] Output written to examples/output/:"

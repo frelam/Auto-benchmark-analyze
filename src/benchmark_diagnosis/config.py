@@ -76,7 +76,37 @@ class CurvesConfig(BaseModel):
     min_arch_points: int = 5
 
 
+class LLMAgentDiagnosisConfig(BaseModel):
+    """LLM-agent-base diagnosis (design: ``diagnosis.engine: llm_agent``).
+
+    The path is only usable when *all three* are configured: ``enabled: true``
+    plus a harness start command and an interaction command. ``harness_cmd``
+    launches the harness agent with the case pack (``{case_pack}`` placeholder,
+    or the ``BMD_CASE_PACK`` env var); ``interact_cmd`` sends a follow-up
+    message file to the running harness (``{case_pack}`` / ``{message}``
+    placeholders, or ``BMD_CASE_PACK`` / ``BMD_MESSAGE``). ``eval_cmd`` is the
+    dataset-verification tool the harness calls inside the loop (default: this
+    CLI's ``eval-task``).
+    """
+
+    enabled: bool = False
+    harness_cmd: str | None = None
+    interact_cmd: str | None = None
+    eval_cmd: str | None = None
+    skill_path: str | None = None
+    max_rounds: int = 5
+    timeout_seconds: int = 7200
+
+
 class DiagnosisConfig(BaseModel):
+    # Auto-diagnosis is OFF by default: evaluation always archives its results
+    # and bad cases, but the diagnosis engines only run when ``enabled`` is
+    # true (CLI ``--diagnose``, or ``diagnosis.enabled: true``).
+    enabled: bool = False
+    # Which diagnosis path runs: ``rule`` (default; deterministic statistics)
+    # or ``llm_agent`` (rule base + bad-case analysis + harness loop).
+    engine: Literal["rule", "llm_agent"] = "rule"
+    llm_agent: LLMAgentDiagnosisConfig = Field(default_factory=LLMAgentDiagnosisConfig)
     sample_size: int = 50
     taxonomy_path: str | None = None
     # Unified intelligent diagnosis pipeline (design doc v2, stages 1-7)
@@ -233,6 +263,47 @@ def resolve_advisor_mode(config: Settings, requested: str | None = None) -> str:
     if mode == "auto":
         return "llm_rules" if has_llm else "rules"
     raise ValueError(f"unknown advisor_mode {mode!r}; expected auto|llm_rules|rules")
+
+
+def resolve_diagnosis_engine(config: Settings, requested: str | None = None) -> str:
+    """Resolve and validate the effective diagnosis engine.
+
+    ``requested`` (or ``config.diagnosis.engine``) is one of ``rule`` /
+    ``llm_agent``:
+
+    * ``rule`` — the deterministic rule-base path (default). No extra config.
+    * ``llm_agent`` — rule base + bad-case analysis + a harness loop. Only
+      usable when the LLM-agent switch AND the harness start/interaction
+      commands are all configured (``diagnosis.llm_agent.enabled`` +
+      ``harness_cmd`` + ``interact_cmd``); otherwise raises ``ValueError`` so
+      misconfiguration fails before evaluation.
+
+    Returns the resolved engine (``"rule"`` or ``"llm_agent"``).
+    """
+    engine = requested or config.diagnosis.engine
+    if engine == "rule":
+        return "rule"
+    if engine == "llm_agent":
+        agent = config.diagnosis.llm_agent
+        missing = [
+            name
+            for name, ok in (
+                ("diagnosis.llm_agent.enabled", agent.enabled),
+                ("diagnosis.llm_agent.harness_cmd", bool(agent.harness_cmd)),
+                ("diagnosis.llm_agent.interact_cmd", bool(agent.interact_cmd)),
+            )
+            if not ok
+        ]
+        if missing:
+            raise ValueError(
+                "diagnosis.engine='llm_agent' requires the LLM-agent switch and "
+                "the harness start/interact commands: configure "
+                + ", ".join(missing)
+                + " (diagnosis.llm_agent.enabled: true + harness_cmd + "
+                "interact_cmd) in the config, or use diagnosis.engine='rule'."
+            )
+        return "llm_agent"
+    raise ValueError(f"unknown diagnosis engine {engine!r}; expected rule|llm_agent")
 
 
 def load_config(path: str | Path | None = None) -> Settings:

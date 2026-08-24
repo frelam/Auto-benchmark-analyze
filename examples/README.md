@@ -14,7 +14,7 @@ bash examples/run_example.sh     # runs `run` and lists the output
 or manually:
 
 ```bash
-benchmark-diagnosis --config examples/run-from-scores.yaml run
+benchmark-diagnosis --config examples/run-from-scores.yaml run --diagnose
 ```
 
 The same run, as pure CLI arguments (input form #2 — no config file):

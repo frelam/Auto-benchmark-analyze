@@ -25,7 +25,8 @@ def render_markdown(report: dict[str, Any]) -> str:
                  f"active_params: {_fmt(model.get('active_params'))}")
     lines.append(f"- **generated_at**: {report.get('generated_at', '?')}")
     lines.append(f"- **mode**: {report.get('mode', 'full')} | "
-                 f"**advisor**: {report.get('advisor_mode', 'rules')}")
+                 f"**advisor**: {report.get('advisor_mode', 'rules')} | "
+                 f"**engine**: {report.get('engine', 'rule')}")
     lines.append(f"- **asset versions**: coverage=`{versions.get('coverage_version')}` "
                  f"portfolio=`{versions.get('portfolio_version')}` "
                  f"curves=`{versions.get('curves_version')}` "
@@ -72,7 +73,10 @@ def render_markdown(report: dict[str, Any]) -> str:
 
     diagnosis_block = report.get("diagnosis")
     if diagnosis_block:
-        lines.append(render_diagnosis(diagnosis_block))
+        if "engine" in diagnosis_block:
+            lines.append(render_diagnosis_engine(diagnosis_block))
+        else:
+            lines.append(render_diagnosis(diagnosis_block))
         lines.append("")
 
     figures = report.get("figures") or []
@@ -107,6 +111,138 @@ def _fmt(value: Any, digits: int = 3) -> str:
     if isinstance(value, float):
         return f"{value:.{digits}f}"
     return str(value)
+
+
+def render_diagnosis_engine(block: dict[str, Any]) -> str:
+    """Render the rule-base / llm-agent diagnosis block (design engines doc)."""
+    engine = block.get("engine", "rule")
+    lines: list[str] = []
+    if engine == "llm_agent":
+        lines.append("## 诊断（llm agent base）")
+    else:
+        lines.append("## 诊断（rule base）")
+    lines.append("")
+    lines.append(f"engine: `{engine}` — 规则路径：低分筛选 → 数据集-能力映射 → "
+                 f"缺失能力 → 能力-数据集建议。")
+    lines.append("")
+
+    rule = block.get("rule_base") or {}
+    low = rule.get("low_score_benchmarks") or []
+    missing = rule.get("missing_capabilities") or []
+    suggestions = rule.get("dataset_suggestions") or []
+
+    lines.append(f"### 低分数据集（低于同等参数量 / 激活参数量分位）— {len(low)}")
+    lines.append("")
+    if low:
+        lines.append("| benchmark | score | 判定基准 | percentile | z-score | shortfall |")
+        lines.append("|---|---|---|---|---|---|")
+        for b in low:
+            lines.append(
+                f"| `{b['benchmark_id']}` | {_fmt(b.get('score'))} | "
+                f"{b.get('curve_basis', b.get('curve_kind') or '—')} | "
+                f"{_fmt(b.get('percentile'), 1)} | {_fmt(b.get('z_score'), 2)} | "
+                f"{_fmt(b.get('shortfall'), 2)} |"
+            )
+        lines.append("")
+    else:
+        lines.append("_无低于预期分位的数据集。_")
+        lines.append("")
+
+    lines.append(f"### 缺失能力（过滤后）— {len(missing)}")
+    lines.append("")
+    if missing:
+        lines.append("| 能力 | 证据 | 低分来源 |")
+        lines.append("|---|---|---|")
+        for cap in missing:
+            srcs = "、".join(
+                f"`{s['benchmark_id']}`(p{s.get('percentile')})"
+                for s in cap.get("sources", [])[:3]
+            )
+            lines.append(
+                f"| `{cap.get('capability_id')}` {cap.get('name', '')} | "
+                f"{_fmt(cap.get('evidence'), 2)} | {srcs} |"
+            )
+        lines.append("")
+    else:
+        lines.append("_没有过滤出缺失能力（各能力证据均低于噪声下限）。_")
+        lines.append("")
+
+    lines.append(f"### 能力-数据集建议 — {len(suggestions)}")
+    lines.append("")
+    for s in suggestions:
+        datasets = s.get("datasets") or []
+        knobs = s.get("hyperparameters") or []
+        verify = s.get("verification_benchmarks") or []
+        lines.append(f"#### `{s['capability_id']}`（gap={_fmt(s.get('gap'), 2)}"
+                     f"{' · ' + s['note'] if s.get('note') else ''}）")
+        lines.append("")
+        if datasets:
+            lines.append("建议补充数据集：")
+            for d in datasets:
+                lines.append(f"- **{d.get('name')}** — {d.get('rationale', '')}"
+                             f"{'（预期效果: ' + d.get('expected_effect', '') + '）' if d.get('expected_effect') else ''}")
+            lines.append("")
+        if knobs:
+            lines.append("调参建议：")
+            for k in knobs:
+                lines.append(
+                    f"- `{k.get('knob')}` {k.get('direction', '')} "
+                    f"（{k.get('typical_range', '')}）— {k.get('rationale', '')}"
+                )
+            lines.append("")
+        if verify:
+            lines.append(
+                "验证数据集："
+                + "、".join(f"`{v['benchmark_id']}`" for v in verify)
+            )
+            lines.append("")
+        if not datasets and not knobs:
+            lines.append("_经验库暂无该能力的干预条目；可先补评测（验证数据集）确认归因。_")
+            lines.append("")
+
+    agent = block.get("agent")
+    if agent:
+        lines.append(f"### LLM Agent 验证（harness 循环）— {agent.get('rounds')} 轮")
+        lines.append("")
+        lines.append(
+            f"- concluded: **{agent.get('concluded')}** · timed_out: "
+            f"{agent.get('timed_out')} · case_pack: `{agent.get('case_pack')}`"
+        )
+        lines.append("")
+        conclusion = agent.get("conclusion") or {}
+        if conclusion:
+            lines.append(f"**{conclusion.get('summary', '')}**")
+            lines.append("")
+            for c in conclusion.get("conclusions") or []:
+                verified = "；".join(c.get("verified_by") or [])
+                lines.append(
+                    f"- `{c.get('capability_id')}` · confidence="
+                    f"{c.get('confidence', '?')} — {c.get('evidence', '')}"
+                    f"{'（验证: ' + verified + '）' if verified else ''}"
+                )
+            lines.append("")
+            for s in conclusion.get("suggestions") or []:
+                ds = "、".join(s.get("datasets") or [])
+                lines.append(
+                    f"- 建议：`{s.get('capability_id')}` → {s.get('action', '')}"
+                    f"{'（数据集: ' + ds + '）' if ds else ''}"
+                    f" · 预期收益 {_fmt(s.get('expected_gain'), 2)}"
+                )
+            lines.append("")
+            bca = conclusion.get("bad_case_analysis") or {}
+            if bca:
+                causes = "、".join(
+                    f"{k}={_fmt(v, 2)}" for k, v in (bca.get("root_causes") or {}).items()
+                )
+                lines.append(
+                    f"bad case 分析：{bca.get('n_cases', 0)} 条 · "
+                    f"root causes: {causes or '—'}"
+                )
+                lines.append("")
+        else:
+            lines.append("_harness 未产出结论（超时或未写 conclusion.json）。_")
+            lines.append("")
+    return "\n".join(lines)
 
 
 def render_diagnosis(block: dict[str, Any]) -> str:

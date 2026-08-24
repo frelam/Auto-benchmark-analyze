@@ -72,6 +72,7 @@ def _harness_results() -> dict:
 
 def test_execute_run_scores_path_writes_artifacts(run_env):
     settings, tmp_path, scores_path = run_env
+    settings.diagnosis.enabled = True
     request = RunRequest(
         model="llama-3-8b", source="scores", scores_file=scores_path
     )
@@ -99,6 +100,7 @@ def test_execute_run_scores_path_writes_artifacts(run_env):
 def test_execute_run_scores_path_renders_figures(run_env):
     pytest.importorskip("matplotlib")
     settings, tmp_path, scores_path = run_env
+    settings.diagnosis.enabled = True
     request = RunRequest(
         model="llama-3-8b", source="scores", scores_file=scores_path
     )
@@ -111,15 +113,19 @@ def test_execute_run_scores_path_renders_figures(run_env):
 
 def test_execute_run_analyze_mode_skips_recommendations(run_env):
     settings, tmp_path, scores_path = run_env
+    settings.diagnosis.enabled = True
     request = RunRequest(
         model="llama-3-8b", mode="analyze", source="scores", scores_file=scores_path
     )
     result = execute_run(settings, request, deploy_weights=_NoServer)
     assert result.report["mode"] == "analyze"
     assert result.report["clusters"]
-    # analyze mode skips Stage 6 suggestions: training list empty.
-    suggestions = (result.report["diagnosis"].get("suggestions") or {})
-    assert (suggestions.get("training") or []) == []
+    # analyze mode trims the final suggestion write-up (rule engine: the
+    # capability-dataset suggestions are omitted, diagnosis kept).
+    block = result.report["diagnosis"]
+    assert block["engine"] == "rule"
+    assert block["rule_base"]["missing_capabilities"]
+    assert block["rule_base"]["dataset_suggestions"] == []
 
 
 def test_execute_run_benchmark_mode_writes_scores_and_skips_diagnosis(run_env):
@@ -192,6 +198,7 @@ def test_build_run_request_accepts_benchmark_mode(run_env):
 
 def test_execute_run_weights_path_deploys_and_tears_down(run_env, monkeypatch):
     settings, tmp_path, scores_path = run_env
+    settings.diagnosis.enabled = True
     request = RunRequest(
         model="llama-3-8b", source="weights", weights="meta-llama/Llama-3-8B"
     )
@@ -236,6 +243,7 @@ def test_execute_run_deploy_failure_tears_down(run_env):
 
 def test_execute_run_non_overlapping_scores_no_crash(run_env):
     settings, tmp_path, scores_path = run_env
+    settings.diagnosis.enabled = True
     off_portfolio = tmp_path / "off.json"
     off_portfolio.write_text(
         json.dumps({"gsm8k": 79.0, "humaneval": 60.0}), encoding="utf-8"
@@ -418,3 +426,64 @@ def test_build_run_request_rejects_bogus_mode(run_env):
     settings, tmp_path, scores_path = run_env
     with pytest.raises(ValueError, match="unknown mode"):
         build_run_request(settings, scores=str(scores_path), mode="bogus")
+
+
+# ------------------------------------------------------------------ diagnosis gating
+
+
+def test_execute_run_diagnosis_disabled_by_default_writes_artifacts(run_env):
+    """Default config: diagnosis is OFF, but eval artifacts are always archived."""
+    settings, tmp_path, scores_path = run_env
+    request = RunRequest(
+        model="llama-3-8b", source="scores", scores_file=scores_path
+    )
+    result = execute_run(settings, request, deploy_weights=_NoServer)
+
+    assert result.report["diagnosed"] is False
+    assert "clusters" not in result.report
+    out = tmp_path / "out"
+    assert (out / "scores.json").exists()
+    assert (out / "eval_results.json").exists()
+    assert (out / "eval_summary.md").exists()
+    assert (out / "bad_cases" / "README.md").exists()
+    assert not (out / "report.md").exists()  # no diagnosis report
+
+
+def test_execute_run_diagnose_request_enables_rule_engine(run_env):
+    settings, tmp_path, scores_path = run_env
+    request = RunRequest(
+        model="llama-3-8b", source="scores", scores_file=scores_path,
+        diagnose=True,
+    )
+    result = execute_run(settings, request, deploy_weights=_NoServer)
+    assert result.report["engine"] == "rule"
+    assert result.report["diagnosis"]["engine"] == "rule"
+    assert result.report["diagnosis"]["rule_base"]["missing_capabilities"]
+
+
+def test_execute_run_engine_llm_agent_fails_fast_without_config(run_env):
+    settings, tmp_path, scores_path = run_env
+    request = RunRequest(
+        model="llama-3-8b", source="scores", scores_file=scores_path,
+        diagnose=True, engine="llm_agent",
+    )
+    with pytest.raises(ValueError, match="llm_agent"):
+        execute_run(settings, request, deploy_weights=_NoServer)
+
+
+def test_build_run_request_diagnose_defaults(run_env):
+    settings, tmp_path, scores_path = run_env
+    request = build_run_request(settings, model="llama-3-8b", scores=str(scores_path))
+    assert request.diagnose is False  # diagnosis.enabled default
+    assert request.engine == "rule"
+    settings.diagnosis.enabled = True
+    request = build_run_request(
+        settings, model="llama-3-8b", scores=str(scores_path)
+    )
+    assert request.diagnose is True
+    request = build_run_request(
+        settings, model="llama-3-8b", scores=str(scores_path),
+        diagnose=False, engine="llm_agent",
+    )
+    assert request.diagnose is False
+    assert request.engine == "llm_agent"

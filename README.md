@@ -4,11 +4,11 @@
 
 围绕一个 LLM 模型（无论你只有**推理服务 IP**，还是只有**权重文件**），系统自动完成三件事：
 
-1. **评测**：桥接业界标准评测工具，跑一组经过"能力覆盖分析"精选的 benchmark；
-2. **诊断**：判断每个能力簇"是否不及预期"，并切片定位低分子类、用固定 taxonomy 分析失败模式；
-3. **建议**：根据 benchmark 相关性 + bad case 归因出"缺什么能力"，从工具维护的经验库（具体数据集 + 调参 knob + 历史效果）给出**可执行**建议，可选 LLM 重排，输出**可追溯、可验证**的优化建议。
+1. **评测**：桥接业界标准评测工具，跑一组经过"能力覆盖分析"精选的 benchmark，并把分数 + bad case 归档为人类可分析的目录；
+2. **诊断**（默认关闭，`--diagnose` 开启）：rule base 统计路径筛低分数据集、过滤缺失能力、按能力-数据集表给补充建议；或 llm agent base 路径在 harness 里做 bad case 分析与结论验证循环；
+3. **建议**：根据能力缺失 + 经验库（具体数据集 + 调参 knob + 历史效果）给出**可执行**建议，输出**可追溯、可验证**的优化建议。
 
-完整设计见 `benchmark-diagnosis-tool-design.md`，统一诊断管线（Stages 1-7）设计见 [`docs/intelligent-diagnosis-v2-design.md`](docs/intelligent-diagnosis-v2-design.md)，技术选型见 [`ARCHITECTURE.md`](ARCHITECTURE.md)。
+完整设计见 `benchmark-diagnosis-tool-design.md`，诊断双路径设计见 [`docs/diagnosis-engines-design.md`](docs/diagnosis-engines-design.md)（v2 stages 1-7 设计见 [`docs/intelligent-diagnosis-v2-design.md`](docs/intelligent-diagnosis-v2-design.md)，作为 legacy 保留），技术选型见 [`ARCHITECTURE.md`](ARCHITECTURE.md)。
 
 ---
 
@@ -43,7 +43,7 @@ bash scripts/install.sh --download-data    # 可选：额外预下载评测数�
 
 ## 快速开始（30 秒）
 
-一条 `run` 命令完成"评测 + 诊断 + 建议"。先选**模型来源**（三选一），再用 `--mode` 控制**跑到哪一步**（默认 `full`）：
+一条 `run` 命令完成"评测 + 归档"，诊断按需开启。先选**模型来源**（三选一），再用 `--mode` 控制**跑到哪一步**（默认 `full`）：
 
 | 模型来源 | 参数 | 是否需要 GPU |
 |---|---|---|
@@ -53,11 +53,16 @@ bash scripts/install.sh --download-data    # 可选：额外预下载评测数�
 
 | `--mode` | 跑到哪一步 | 产出 |
 |---|---|---|
-| `benchmark` | 只评测，不诊断 | `scores.json`（可直接喂回 `--scores` 接着跑诊断） |
-| `analyze` | 评测 + 诊断 | + `report.md`（无建议文案） |
-| `full`（默认） | 评测 + 诊断 + 建议 | + `report.md` 完整版（含可执行建议） |
+| `benchmark` | 只评测 | `scores.json` + `eval_summary.md` + `bad_cases/`（不诊断） |
+| `analyze` | 评测 + 诊断 | + 诊断报告（归因，无最终建议文案） |
+| `full`（默认） | 评测 + 诊断 | + `report.md` 完整版（含建议） |
 
-> 三种来源互斥：传两个会被拒绝并报清晰错误。来源 / mode / advisor 也能写进 YAML 用 `--config` 传，CLI 参数覆盖配置。数据库为空时自动载入 seed 并构建离线资产，无需手动准备。
+> **诊断默认不开启**：评测结果和 bad case 每次都归档（人类可手工分析），但诊断
+> 引擎只在 `--diagnose`（或配置 `diagnosis.enabled: true`）时运行。诊断分两条路径：
+> **rule base**（默认，确定性统计）与 **llm agent base**（`--engine llm_agent`，
+> 需配置 `diagnosis.llm_agent` 的开关 + harness 启动/交互命令）。三种来源互斥：
+> 传两个会被拒绝并报清晰错误。来源 / mode / advisor 也能写进 YAML 用 `--config`
+> 传，CLI 参数覆盖配置。数据库为空时自动载入 seed 并构建离线资产，无需手动准备。
 
 ### ① 有权重或已部署服务 → 跑完整流程
 
@@ -69,13 +74,13 @@ benchmark-diagnosis run --model llama-3-8b --model-id meta-llama/Llama-3-8B-Inst
 benchmark-diagnosis run --model my-model --base-url http://<ip>:8000/v1
 ```
 
-### ② 只想跑 benchmark（拿分数，先不诊断）
+### ② 只想跑 benchmark（拿分数 + bad case，先不诊断）
 
-加 `--mode benchmark`：只评测，把分数写到 `scores.json`，之后用 `--scores` 接着跑诊断。
+加 `--mode benchmark`：只评测，把分数写到 `scores.json`，之后用 `--scores` 接着跑诊断。评测结果和错题会同时归档到输出目录。
 
 ```bash
 benchmark-diagnosis run --model my-model --base-url http://<ip>:8000/v1 --mode benchmark
-# → data/run_output/scores.json
+# → data/run_output/scores.json + eval_summary.md + bad_cases/
 ```
 
 省时间只跑几个 benchmark：用 `--benchmarks` 逗号分隔指定子集（代表性 portfolio 的子集）。
@@ -89,16 +94,16 @@ benchmark-diagnosis run --model my-model --base-url http://<ip>:8000/v1 \
 
 ### ③ 已有 benchmark 分数 → 只跑诊断
 
-用 `--scores` 跳过评测，直接诊断（默认 `full` 含建议；只要归因不要建议就加 `--mode analyze`）：
+用 `--scores` 跳过评测，加 `--diagnose` 直接诊断（默认 `full` 含建议；只要归因不要建议就加 `--mode analyze`）：
 
 ```bash
-benchmark-diagnosis run --model my-model --scores scores.json
-benchmark-diagnosis run --model my-model --scores scores.json --mode analyze   # 只要归因，不要建议
+benchmark-diagnosis run --model my-model --scores scores.json --diagnose
+benchmark-diagnosis run --model my-model --scores scores.json --diagnose --mode analyze   # 只要归因，不要建议
 ```
 
 > 没 GPU 想先看效果？用一份 JSON 分数文件代替真实评测，30 秒出结果（下面的输出就来自这条命令）：
 > ```bash
-> benchmark-diagnosis --config examples/run-from-scores.yaml run
+> benchmark-diagnosis --config examples/run-from-scores.yaml run --diagnose
 > ```
 
 ### ④ 跑完看什么、怎么拿结论
@@ -107,15 +112,43 @@ benchmark-diagnosis run --model my-model --scores scores.json --mode analyze   #
 
 | 文件 | 内容 |
 |---|---|
-| `report.md` | 完整诊断报告（人看） |
-| `metrics.json` | 同内容，机器可读 |
-| `figures/` | 三张图：各 benchmark 分数 / 各能力簇判定（绿=达标 · 红=不及预期）/ 量化 gap |
+| `scores.json` | 各 benchmark 分数（`{benchmark_id: score}`，可直接喂回 `--scores`） |
+| `eval_summary.md` | 评测概览（分数 + 判定基准 + bad case 统计），**每次评测都有** |
+| `eval_results.json` | 机器可读评测明细（metric / 样本数 / 错题数 / 预期曲线判定） |
+| `bad_cases/` | 逐 benchmark 的错题归档（`.jsonl` 机器可读 + `.md` 人读），**人类可手工分析** |
+| `report.md` | 诊断报告（仅开启诊断时生成） |
+| `metrics.json` | 同内容，机器可读（仅开启诊断时生成） |
+| `figures/` | 图表（仅开启诊断时生成） |
 
-**最关心的结论在 `report.md` 的"诊断"章节**：每条都讲清楚"低分 benchmark → 缺什么能力 → 该补什么数据集 / 调什么参数 + 预期收益 + 验证实验"。命令行也打印摘要（N 个簇、M 个 under-performing）。
+**最关心的结论在 `report.md` 的"诊断"章节**：rule base 路径给出低分数据集（低于同等参数量 / 激活参数量分位）→ 缺失能力 → 建议补充的数据集 / 调参；命令行也打印摘要（N 个簇、M 个 under-performing）。
 
-### 诊断管线与反馈回路
+### 诊断管线与两条路径
 
-`run`（`analyze` / `full`）走统一诊断管线 Stage 0-7：簇级判定聚合 → 候选能力生成 → probe 单项复测（pass@1/pass@k）→ 引导式 bad case 归因（content/format/grading）→ 置信度融合（High/Medium/Low）→ 优先级排序（ExpectedGain/Cost）→ 建议文案 → 反馈校准。`--mode analyze` 跳过 Stage 6 建议文案。执行建议后用反馈回路校准 Stage 5 的 Cost/Gain 估计（跑得越久排得越准）：
+诊断默认关闭（`--diagnose` 或 `diagnosis.enabled: true` 开启），`--engine` 选择路径：
+
+- **rule base（默认，`diagnosis.engine: rule`）**：确定性统计——按"同等参数量 /
+  同等激活参数量"预期曲线分位筛选低分数据集 → 数据集-能力映射表 → 过滤出缺失能力
+  （噪声下限 + 祖先折叠）→ 按能力-数据集表（经验库）提示补充哪些数据集、调什么参数。
+  完整设计见 [`docs/diagnosis-engines-design.md`](docs/diagnosis-engines-design.md)。
+- **llm agent base（`--engine llm_agent`）**：先跑 rule base 采纳其结论，再做
+  bad case 分析，然后在 harness（如 DeepSeek Harness）里循环"分析得结论 → 用
+  `eval-task` 数据集评测或 bad case 分析验证 → 得新猜想"，直到最终结论。
+  需要配置 `diagnosis.llm_agent`（开关 + harness 启动/交互命令）；工作流以
+  [skill](skills/benchmark-diagnosis/SKILL.md) 形式提供：
+
+```yaml
+diagnosis:
+  enabled: true
+  engine: llm_agent
+  llm_agent:
+    enabled: true
+    harness_cmd:  "dsh profile run my-diagnosis --case-pack {case_pack}"   # 启动命令
+    interact_cmd: "dsh profile interact my-diagnosis --message {message}"  # 交互命令
+```
+
+harness 内可执行 `benchmark-diagnosis eval-task --task <id> --limit <N> --base-url <url> --model <m> --out <dir>` 验证假设（跑数据集子集并归档分数 + bad case）。
+
+反馈回路（v2 保留，作用于经验库）：执行建议后校准 Cost/Gain 估计：
 
 ```bash
 benchmark-diagnosis feedback log reasoning.math.calculation rejection_sampling \
@@ -142,7 +175,7 @@ benchmark-diagnosis visualize --out results      # 把离线资产渲染成图�
 benchmark-diagnosis run --model llama-3-8b --model-id meta-llama/Llama-3-8B-Instruct
 ```
 
-自动完成：拉取权重 → vLLM 部署并等待就绪 → 跑代表性 benchmark 组合 → 诊断 → 建议 → 写报告。
+自动完成：拉取权重 → vLLM 部署并等待就绪 → 跑代表性 benchmark 组合 → 归档分数 + bad case。想要诊断就加 `--diagnose`（默认 rule base；`--engine llm_agent` 走 harness 路径）。
 
 ### 场景 B：只有推理服务 IP
 
@@ -159,7 +192,7 @@ benchmark-diagnosis run --model my-model --base-url http://<ip>:8000/v1
 
 ### 输出结果
 
-跑完 `run`，命令行打印摘要，同时生成 `report.md`（完整诊断报告）、`metrics.json`（机器可读）与 `figures/`（三张图）。你最关心的两样东西：
+跑完 `run`（开了 `--diagnose`），命令行打印摘要，同时生成 `report.md`（完整诊断报告）、`metrics.json`（机器可读）与 `figures/`（三张图）；不开诊断时每次评测也会生成 `scores.json` / `eval_summary.md` / `bad_cases/` 供人工分析。你最关心的两样东西：
 
 **① 各 benchmark 得分**（蓝色 = 代表性组合，灰色 = 额外补充的分数）：
 

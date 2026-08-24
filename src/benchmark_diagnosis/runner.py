@@ -36,17 +36,18 @@ from sqlalchemy.orm import Session
 from benchmark_diagnosis.config import Settings, resolve_advisor_mode
 from benchmark_diagnosis.core import db
 from benchmark_diagnosis.core.schema import ModelRecord
-from benchmark_diagnosis.data import ingestion
+from benchmark_diagnosis.data import ingestion, queries
 from benchmark_diagnosis.evaluation_orchestration.deploy import (
     serve_command,
     wait_until_ready,
 )
+from benchmark_diagnosis.evaluation_orchestration.expectation_curves import judge
 from benchmark_diagnosis.evaluation_orchestration.harness_bridge import (
     build_command,
     extract_scores,
     run_eval,
 )
-from benchmark_diagnosis.pipeline import build_offline, diagnose_model
+from benchmark_diagnosis.pipeline import _revive_curves, build_offline, diagnose_model
 from benchmark_diagnosis.reporting.report_generator import render_json, render_markdown
 
 console = Console()
@@ -59,9 +60,14 @@ class RunRequest:
     ``source`` selects the model source: ``weights`` (auto-deploy via vLLM),
     ``endpoint`` (existing inference service IP) or ``scores`` (JSON file, no
     eval). ``mode`` picks how far the pipeline goes: ``benchmark`` (evaluation
-    only, scores written to disk — no diagnosis), ``analyze`` (evaluation +
-    diagnosis, no recommendations), or ``full`` (evaluation + diagnosis +
-    recommendations).
+    only), ``analyze`` (evaluation + diagnosis, no final suggestion
+    write-up), or ``full`` (evaluation + diagnosis + suggestions).
+
+    ``diagnose`` gates the diagnosis engines: evaluation always archives its
+    results + bad cases, but diagnosis only runs when ``diagnose`` is true
+    (CLI ``--diagnose`` or ``diagnosis.enabled: true``) and ``mode`` is
+    ``analyze``/``full``. ``engine`` selects the path: ``rule`` (default,
+    deterministic) or ``llm_agent`` (rule base + harness loop).
     """
 
     model: str | None = None
@@ -76,6 +82,8 @@ class RunRequest:
     release_date: str | None = None
     advisor_mode: str = "auto"
     output: Path | None = None
+    diagnose: bool | None = None
+    engine: str | None = None
 
 
 @dataclass
@@ -105,6 +113,8 @@ def build_run_request(
     release_date: str | None = None,
     benchmarks: list[str] | None = None,
     output: str | Path | None = None,
+    diagnose: bool | None = None,
+    engine: str | None = None,
 ) -> RunRequest:
     """Merge CLI arguments over the config's ``run`` profile into a run request.
 
@@ -131,6 +141,10 @@ def build_run_request(
             the evaluation path (``weights`` / ``endpoint``); ignored when
             ``source=scores`` (the scores file carries its own benchmark set).
         output: Report output path (defaults to ``run.output.dir/report.md``).
+        diagnose: Enable the diagnosis engines (CLI ``--diagnose``); default
+            ``settings.diagnosis.enabled`` (which defaults to False).
+        engine: Diagnosis path ``rule`` / ``llm_agent``; default
+            ``settings.diagnosis.engine`` (``rule``).
 
     Returns:
         A fully-resolved :class:`RunRequest`.
@@ -204,6 +218,10 @@ def build_run_request(
         raise ValueError(
             f"unknown advisor_mode {advisor_mode!r}; expected auto|llm_rules|rules"
         )
+    if engine not in (None, "rule", "llm_agent"):
+        raise ValueError(
+            f"unknown diagnosis engine {engine!r}; expected rule|llm_agent"
+        )
 
     resolved_model = model or cfg.name
     if resolved_model is None and source == "weights":
@@ -237,6 +255,8 @@ def build_run_request(
         release_date=release_date or cfg.release_date,
         advisor_mode=advisor_mode or settings.recommendation.advisor_mode,
         output=Path(output) if output is not None else None,
+        diagnose=diagnose if diagnose is not None else settings.diagnosis.enabled,
+        engine=engine or settings.diagnosis.engine,
     )
 
 
@@ -278,6 +298,26 @@ def execute_run(
         else "n/a"
     )
 
+    # Diagnosis is opt-in: evaluation always archives its results + bad cases,
+    # but the engines only run when requested (CLI --diagnose / config
+    # diagnosis.enabled) and the mode goes past evaluation. ``request.diagnose``
+    # is None when the caller built the request directly (no CLI merge), so the
+    # config default applies.
+    diagnose_requested = (
+        settings.diagnosis.enabled if request.diagnose is None else request.diagnose
+    )
+    diagnose = bool(diagnose_requested) and mode in ("analyze", "full")
+    engine: str | None = None
+    if diagnose:
+        from benchmark_diagnosis.config import resolve_diagnosis_engine
+
+        engine = resolve_diagnosis_engine(settings, request.engine)
+    elif diagnose_requested and mode == "benchmark":
+        console.print(
+            "[yellow]--diagnose is ignored in benchmark mode: evaluation artifacts "
+            "are archived; re-run with --mode analyze/full to diagnose.[/]"
+        )
+
     deploy_weights = deploy_weights or _launch_server
     wait_ready = wait_ready or wait_until_ready
     run_harness = run_harness or run_eval
@@ -306,7 +346,9 @@ def execute_run(
                 "no model source in request; expected weights|endpoint|scores"
             )
 
-        raw_scores = _collect_scores(request, base_url, portfolio_ids, run_harness, settings)
+        raw_scores, results_payload = _collect_scores(
+            request, base_url, portfolio_ids, run_harness, settings
+        )
 
         if raw_scores and not (portfolio_ids & set(raw_scores)):
             console.print(
@@ -315,22 +357,32 @@ def execute_run(
                 f"{sorted(portfolio_ids)}[/]"
             )
 
+        # Evaluation artifacts (scores + bad cases) are archived on every run,
+        # diagnosis or not — this is the human-analyzable eval record.
+        output_dir = (
+            request.output or Path(settings.run.output.dir) / "report.md"
+        ).parent
+        output_dir.mkdir(parents=True, exist_ok=True)
+        model_record = get_or_build_model(
+            session, request.model, request.arch, request.params, request.release_date
+        )
+        artifacts = _archive_eval_artifacts(
+            session, output_dir, raw_scores, results_payload, settings, model_record
+        )
+
         if mode == "benchmark":
-            # Benchmark-only: write the scores JSON and stop — no diagnosis.
-            # The file is shaped exactly like the ``--scores`` input so a
-            # follow-up ``run --scores <path>`` completes the diagnosis.
-            scores_path = (
-                request.output or Path(settings.run.output.dir) / "report.md"
-            )
-            scores_path = scores_path.parent / "scores.json"
-            scores_path.parent.mkdir(parents=True, exist_ok=True)
-            scores_path.write_text(
-                json.dumps(raw_scores, indent=2, ensure_ascii=False),
-                encoding="utf-8",
-            )
+            # Benchmark-only: scores.json is shaped exactly like the ``--scores``
+            # input so a follow-up ``run --scores <path>`` completes the
+            # diagnosis; bad cases / summary live next to it.
+            scores_path = output_dir / "scores.json"
             console.print(
                 f"[green]Scores:[/] {scores_path} ({len(raw_scores)} benchmarks) "
                 f"— feed back with `run --scores {scores_path}`"
+            )
+            console.print(
+                f"[green]Artifacts:[/] {artifacts.summary_path} "
+                f"({sum(len(v) for v in artifacts.bad_cases.values())} bad case(s) "
+                f"in {artifacts.bad_case_dir})"
             )
             return RunResult(
                 report={"scores": raw_scores, "mode": "benchmark"},
@@ -342,9 +394,27 @@ def execute_run(
                 served=source == "weights",
             )
 
-        model_record = get_or_build_model(
-            session, request.model, request.arch, request.params, request.release_date
-        )
+        if not diagnose:
+            console.print(
+                "[yellow]Diagnosis disabled[/] (enable with --diagnose or "
+                "diagnosis.enabled: true). Evaluation artifacts written:"
+            )
+            console.print(
+                f"[green]Summary:[/] {artifacts.summary_path}\n"
+                f"[green]Results:[/] {artifacts.results_path}\n"
+                f"[green]Bad cases:[/] {artifacts.bad_case_dir}"
+            )
+            return RunResult(
+                report={"scores": raw_scores, "mode": mode, "diagnosed": False},
+                report_path=artifacts.summary_path,
+                metrics_path=artifacts.results_path,
+                figure_paths=[],
+                mode=mode,
+                advisor_mode=advisor_mode,
+                served=source == "weights",
+            )
+
+        assert engine is not None
         report = diagnose_model(
             session,
             model_record,
@@ -352,13 +422,16 @@ def execute_run(
             settings,
             mode=mode,
             advisor_mode=advisor_mode,
+            engine=engine,
+            base_url=base_url,
+            bad_cases_dir=artifacts.bad_case_dir,
+            output_dir=output_dir,
         )
         report["scores"] = raw_scores
 
         # Artifacts land next to the report so the Markdown figure links hold
         # wherever the report is written (config run.output.dir when no --output).
-        report_path = request.output or Path(settings.run.output.dir) / "report.md"
-        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path = output_dir / "report.md"
 
         figure_paths = _render_figures(
             report, raw_scores, report_path.parent / "figures", portfolio_ids
@@ -391,11 +464,25 @@ def execute_run(
 
 
 def ensure_offline(session: Session, settings: Settings) -> None:
-    """Idempotently build seed data + offline assets (coverage/portfolio/curves)."""
-    if db.load_latest_asset(session, "portfolio") is None:
+    """Idempotently build seed data + offline assets (coverage/portfolio/curves).
+
+    The build runs when ANY of the four asset types (coverage / portfolio /
+    curves / experience) is missing — a stale database from an older version
+    (e.g. built before the experience asset existed) is completed rather than
+    silently leaving the diagnosis engines without their tables.
+    """
+    missing = [
+        asset_type
+        for asset_type in ("coverage", "portfolio", "curves", "experience")
+        if db.load_latest_asset(session, asset_type) is None
+    ]
+    if missing:
         if session.scalar(select(ModelRecord.model_id).limit(1)) is None:
             ingestion.load_seed(session)
-        console.print("[cyan]Building offline assets (coverage/portfolio/curves)...[/]")
+        console.print(
+            "[cyan]Building offline assets "
+            f"(coverage/portfolio/curves/experience; missing: {missing})...[/]"
+        )
         build_offline(session, settings)
 
 
@@ -436,8 +523,13 @@ def _collect_scores(
     portfolio_ids: set[str],
     run_harness: Callable[[list[str]], dict[str, Any]],
     settings: Settings,
-) -> dict[str, float]:
-    """Load scores from a file, or evaluate the portfolio and flatten the results."""
+) -> tuple[dict[str, float], dict[str, Any]]:
+    """Load scores from a file, or evaluate the portfolio and flatten the results.
+
+    Returns ``(raw_scores, results_payload)`` — the second element is the
+    parsed harness results dict (empty for the ``--scores`` path) and feeds
+    the evaluation-artifact archiving (bad-case extraction).
+    """
     if request.source == "scores":
         scores_path = request.scores_file
         payload = json.loads(scores_path.read_text(encoding="utf-8"))
@@ -453,12 +545,12 @@ def _collect_scores(
                     "(expected a number)"
                 ) from None
         console.print(f"[green]Loaded {len(raw)} score(s) from {scores_path}[/]")
-        return raw
+        return raw, {}
 
     tasks = _resolve_eval_tasks(portfolio_ids, request.benchmarks)
     if not tasks:
         console.print("[yellow]No benchmarks to evaluate; skipping eval.[/]")
-        return {}
+        return {}, {}
     cmd = build_command(
         request.model,
         tasks,
@@ -483,9 +575,51 @@ def _collect_scores(
     else:
         console.print(f"[cyan]Evaluating {len(tasks)} benchmark(s)[/] (full portfolio)")
     console.print("[dim]  " + " ".join(cmd) + "[/]")
-    raw_scores = extract_scores(run_harness(cmd))
+    results = run_harness(cmd)
+    raw_scores = extract_scores(results)
     _print_scores(raw_scores)
-    return raw_scores
+    return raw_scores, results
+
+
+def _archive_eval_artifacts(
+    session: Session,
+    output_dir: Path,
+    raw_scores: dict[str, float],
+    results: dict[str, Any],
+    settings: Settings,
+    model: ModelRecord,
+) -> Any:
+    """Write scores / eval detail / summary / bad cases under ``output_dir``.
+
+    Runs on every evaluation (diagnosis or not) so the run leaves a
+    self-contained, human-analyzable record. Enriches ``eval_results.json``
+    with expectation-curve judgments when the curves asset exists (best
+    effort: failures degrade to an unjudged record, never crash the run).
+    """
+    from benchmark_diagnosis.evaluation_orchestration.artifacts import (
+        find_sample_files,
+        write_eval_artifacts,
+    )
+
+    judgments: dict[str, dict[str, Any]] = {}
+    try:
+        curves = _revive_curves(db.load_latest_asset(session, "curves") or [])
+        for bid, score in raw_scores.items():
+            judgments[bid] = judge(model, bid, score, curves, settings.curves)
+    except Exception:  # noqa: BLE001 - archiving must never fail the run
+        judgments = {}
+    benchmark_names = {
+        b.benchmark_id: b.name for b in queries.list_benchmarks(session)
+    }
+    sample_files = find_sample_files(settings.evaluation.output_dir)
+    return write_eval_artifacts(
+        output_dir,
+        raw_scores,
+        results,
+        sample_files,
+        benchmark_names=benchmark_names,
+        judgments=judgments,
+    )
 
 
 def _resolve_eval_tasks(

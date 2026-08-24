@@ -1014,6 +1014,7 @@ def test_pipeline_diagnose_model_unified(seeded_db) -> None:
         config,
         mode="full",
         advisor_mode="rules",
+        engine="legacy",
     )
     block = report["diagnosis"]
     assert block["candidates"]  # non-empty under-performing capability set

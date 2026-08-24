@@ -7,26 +7,27 @@
     "active_params": 8.0,
     "release_date": "2024-04-18"
   },
-  "generated_at": "2026-08-17T13:04:48.683518",
+  "generated_at": "2026-08-24T04:35:13.460117",
   "mode": "full",
+  "engine": "rule",
   "advisor_mode": "rules",
   "versions": {
-    "coverage_version": "coverage-20260814084434-3e725b",
-    "portfolio_version": "portfolio-20260814084434-ecae13",
-    "curves_version": "curves-20260814084434-ee521f",
-    "experience_version": null
+    "coverage_version": "coverage-20260824043513-dc410a",
+    "portfolio_version": "portfolio-20260824043513-6cea43",
+    "curves_version": "curves-20260824043513-4724d5",
+    "experience_version": "experience-20260824043513-2c8139"
   },
   "clusters": [
     {
       "cluster_id": "cluster_0",
-      "score": 38.66609375785146,
+      "score": 38.66609375785147,
       "percentile": 0.0,
       "z_score": -2.750266325477142,
       "underperforming": true,
       "benchmarks": [
         {
           "benchmark_id": "longbench_v2",
-          "weight": 0.8339027051376603,
+          "weight": 0.9155274327946917,
           "score": 38.0,
           "residual": -0.1567084631853819,
           "percentile": 0.0,
@@ -35,7 +36,7 @@
         },
         {
           "benchmark_id": "mmlu_pro",
-          "weight": 0.049008468455651516,
+          "weight": 0.05380555433381808,
           "score": 50.0,
           "residual": -0.24098224373238586,
           "percentile": 0.0,
@@ -50,23 +51,23 @@
     },
     {
       "cluster_id": "cluster_1",
-      "score": 24.453508629832477,
-      "percentile": 1.7006573618717964,
-      "z_score": -2.770220144997907,
-      "underperforming": true,
+      "score": 65.54073706006692,
+      "percentile": 25.61823857298684,
+      "z_score": -0.19070466954076462,
+      "underperforming": false,
       "benchmarks": [
         {
-          "benchmark_id": "simpleqa",
-          "weight": 0.935254801125754,
-          "score": 24.0,
-          "residual": -0.2636399192713058,
-          "percentile": 0.0,
-          "z_score": -2.8654292721844468,
-          "underperforming": true
+          "benchmark_id": "mmlu",
+          "weight": 0.9639600388717394,
+          "score": 66.0,
+          "residual": -0.02459291108785555,
+          "percentile": 25.0,
+          "z_score": -0.20300944411252303,
+          "underperforming": false
         },
         {
           "benchmark_id": "math",
-          "weight": 0.02728243391410431,
+          "weight": 0.017333529584094294,
           "score": 40.0,
           "residual": 0.12526391015363675,
           "percentile": 60.0,
@@ -75,479 +76,542 @@
         }
       ],
       "diagnosis": {
-        "sub_capability": "simpleqa",
-        "quantified_gap": 0.2526167165951114
-      }
-    },
-    {
-      "cluster_id": "cluster_2",
-      "score": 18.0,
-      "percentile": 23.076923076923077,
-      "z_score": -0.8118418121798199,
-      "underperforming": true,
-      "benchmarks": [
-        {
-          "benchmark_id": "swe_bench",
-          "weight": 0.9259543608651996,
-          "score": 18.0,
-          "residual": -0.10673385013930631,
-          "percentile": 23.076923076923077,
-          "z_score": -0.8118418121798199,
-          "underperforming": true
-        }
-      ],
-      "diagnosis": {
-        "sub_capability": "swe_bench",
-        "quantified_gap": 0.10673385013930631
+        "sub_capability": "math",
+        "quantified_gap": 0.021945846307378856
       }
     }
   ],
   "diagnosis": {
-    "taxonomy_version": "1",
-    "probe_registry_version": "1",
-    "candidates": [
-      {
-        "capability_id": "knowledge.factual",
-        "screening_score": 0.1318199596356529,
-        "evidence_mode": "coarse",
-        "sources": [
-          "simpleqa"
-        ],
-        "sub_accuracies": [],
-        "source_scores": {
-          "simpleqa": 0.1318199596356529
-        },
-        "low_support": false
-      },
-      {
-        "capability_id": "knowledge.world",
-        "screening_score": 0.12049112186619293,
-        "evidence_mode": "coarse",
-        "sources": [
-          "mmlu_pro"
-        ],
-        "sub_accuracies": [],
-        "source_scores": {
-          "mmlu_pro": 0.12049112186619293
-        },
-        "low_support": false
-      },
-      {
-        "capability_id": "reasoning",
-        "screening_score": 0.12049112186619293,
-        "evidence_mode": "coarse",
-        "sources": [
-          "mmlu_pro"
-        ],
-        "sub_accuracies": [],
-        "source_scores": {
-          "mmlu_pro": 0.12049112186619293
-        },
-        "low_support": false
-      },
-      {
-        "capability_id": "long_context",
-        "screening_score": 0.07835423159269095,
-        "evidence_mode": "coarse",
-        "sources": [
-          "longbench_v2"
-        ],
-        "sub_accuracies": [],
-        "source_scores": {
-          "longbench_v2": 0.07835423159269095
-        },
-        "low_support": false
-      },
-      {
-        "capability_id": "language.reading",
-        "screening_score": 0.07835423159269095,
-        "evidence_mode": "coarse",
-        "sources": [
-          "longbench_v2"
-        ],
-        "sub_accuracies": [],
-        "source_scores": {
-          "longbench_v2": 0.07835423159269095
-        },
-        "low_support": false
-      },
-      {
-        "capability_id": "code",
-        "screening_score": 0.053366925069653154,
-        "evidence_mode": "coarse",
-        "sources": [
-          "swe_bench"
-        ],
-        "sub_accuracies": [],
-        "source_scores": {
-          "swe_bench": 0.053366925069653154
-        },
-        "low_support": false
-      },
-      {
-        "capability_id": "agent.tool_call",
-        "screening_score": 0.053366925069653154,
-        "evidence_mode": "coarse",
-        "sources": [
-          "swe_bench"
-        ],
-        "sub_accuracies": [],
-        "source_scores": {
-          "swe_bench": 0.053366925069653154
-        },
-        "low_support": false
-      }
-    ],
-    "probe_results": [
-      {
-        "capability_id": "knowledge.factual",
-        "state": "CONFIRMED",
-        "probe_benchmark_id": "simpleqa",
-        "percentile": 14.285714285714285,
-        "z_score": -0.8147651778072967,
-        "pass_1": null,
-        "pass_k": null,
-        "passk_gap_ratio": null,
-        "note": "simpleqa: percentile=14.3 (threshold 25.0)"
-      },
-      {
-        "capability_id": "knowledge.world",
-        "state": "CONFIRMED",
-        "probe_benchmark_id": "mmlu",
-        "percentile": 6.25,
-        "z_score": -1.545259424864069,
-        "pass_1": null,
-        "pass_k": null,
-        "passk_gap_ratio": null,
-        "note": "mmlu: percentile=6.2 (threshold 25.0)"
-      },
-      {
-        "capability_id": "reasoning",
-        "state": "NO_PROBE",
-        "probe_benchmark_id": null,
-        "percentile": null,
-        "z_score": null,
-        "pass_1": null,
-        "pass_k": null,
-        "passk_gap_ratio": null,
-        "note": "no probe registered for this capability (or any ancestor)"
-      },
-      {
-        "capability_id": "long_context",
-        "state": "CONFIRMED",
-        "probe_benchmark_id": "longbench_v2",
-        "percentile": 0.0,
-        "z_score": -2.0756039527516275,
-        "pass_1": null,
-        "pass_k": null,
-        "passk_gap_ratio": null,
-        "note": "longbench_v2: percentile=0.0 (threshold 25.0)"
-      },
-      {
-        "capability_id": "language.reading",
-        "state": "CONFIRMED",
-        "probe_benchmark_id": "mmlu",
-        "percentile": 6.25,
-        "z_score": -1.545259424864069,
-        "pass_1": null,
-        "pass_k": null,
-        "passk_gap_ratio": null,
-        "note": "mmlu: percentile=6.2 (threshold 25.0)"
-      },
-      {
-        "capability_id": "code",
-        "state": "NO_PROBE",
-        "probe_benchmark_id": null,
-        "percentile": null,
-        "z_score": null,
-        "pass_1": null,
-        "pass_k": null,
-        "passk_gap_ratio": null,
-        "note": "no probe registered for this capability (or any ancestor)"
-      },
-      {
-        "capability_id": "agent.tool_call",
-        "state": "PENDING_EVAL",
-        "probe_benchmark_id": null,
-        "percentile": null,
-        "z_score": null,
-        "pass_1": null,
-        "pass_k": null,
-        "passk_gap_ratio": null,
-        "note": "probe(s) registered but not evaluated this run: tau2_bench"
-      }
-    ],
-    "verdicts": [
-      {
-        "capability_id": "knowledge.factual",
-        "confidence": "Medium",
-        "suggestion_type": "targeted_synthesis",
-        "evidence_score": 0.4,
-        "needs_human_review": false,
-        "rationale": "缺少 bad-case 分析证据，置信度封顶 Medium",
-        "probe_state": "CONFIRMED",
-        "data_share": null
-      },
-      {
-        "capability_id": "knowledge.world",
-        "confidence": "Medium",
-        "suggestion_type": "targeted_synthesis",
-        "evidence_score": 0.4,
-        "needs_human_review": false,
-        "rationale": "缺少 bad-case 分析证据，置信度封顶 Medium",
-        "probe_state": "CONFIRMED",
-        "data_share": null
-      },
-      {
-        "capability_id": "reasoning",
-        "confidence": "Medium",
-        "suggestion_type": "build_probe_first",
-        "evidence_score": 0.0,
-        "needs_human_review": false,
-        "rationale": "缺少 bad-case 分析证据，置信度封顶 Medium；且 probe 证据缺失，需先建设/评测 probe 集",
-        "probe_state": "NO_PROBE",
-        "data_share": null
-      },
-      {
-        "capability_id": "long_context",
-        "confidence": "Medium",
-        "suggestion_type": "targeted_synthesis",
-        "evidence_score": 0.4,
-        "needs_human_review": false,
-        "rationale": "缺少 bad-case 分析证据，置信度封顶 Medium",
-        "probe_state": "CONFIRMED",
-        "data_share": null
-      },
-      {
-        "capability_id": "language.reading",
-        "confidence": "Medium",
-        "suggestion_type": "targeted_synthesis",
-        "evidence_score": 0.4,
-        "needs_human_review": false,
-        "rationale": "缺少 bad-case 分析证据，置信度封顶 Medium",
-        "probe_state": "CONFIRMED",
-        "data_share": null
-      },
-      {
-        "capability_id": "code",
-        "confidence": "Medium",
-        "suggestion_type": "build_probe_first",
-        "evidence_score": 0.0,
-        "needs_human_review": false,
-        "rationale": "缺少 bad-case 分析证据，置信度封顶 Medium；且 probe 证据缺失，需先建设/评测 probe 集",
-        "probe_state": "NO_PROBE",
-        "data_share": null
-      },
-      {
-        "capability_id": "agent.tool_call",
-        "confidence": "Medium",
-        "suggestion_type": "build_probe_first",
-        "evidence_score": 0.0,
-        "needs_human_review": false,
-        "rationale": "缺少 bad-case 分析证据，置信度封顶 Medium；且 probe 证据缺失，需先建设/评测 probe 集",
-        "probe_state": "PENDING_EVAL",
-        "data_share": null
-      }
-    ],
-    "priorities": [
-      {
-        "capability_id": "code",
-        "suggestion_type": "build_probe_first",
-        "confidence": "Medium",
-        "expected_gain": 0.0494,
-        "gain_lower": 0.0494,
-        "cost": 1.0,
-        "priority": 0.0247,
-        "sources": [
-          "swe_bench"
-        ]
-      },
-      {
-        "capability_id": "agent.tool_call",
-        "suggestion_type": "build_probe_first",
-        "confidence": "Medium",
-        "expected_gain": 0.0494,
-        "gain_lower": 0.0494,
-        "cost": 1.0,
-        "priority": 0.0247,
-        "sources": [
-          "swe_bench"
-        ]
-      },
-      {
-        "capability_id": "knowledge.factual",
-        "suggestion_type": "targeted_synthesis",
-        "confidence": "Medium",
-        "expected_gain": 0.1233,
-        "gain_lower": 0.1233,
-        "cost": 4.0,
-        "priority": 0.0154,
-        "sources": [
-          "simpleqa"
-        ]
-      },
-      {
-        "capability_id": "long_context",
-        "suggestion_type": "targeted_synthesis",
-        "confidence": "Medium",
-        "expected_gain": 0.0653,
-        "gain_lower": 0.0653,
-        "cost": 4.0,
-        "priority": 0.0082,
-        "sources": [
-          "longbench_v2"
-        ]
-      },
-      {
-        "capability_id": "language.reading",
-        "suggestion_type": "targeted_synthesis",
-        "confidence": "Medium",
-        "expected_gain": 0.0653,
-        "gain_lower": 0.0653,
-        "cost": 4.0,
-        "priority": 0.0082,
-        "sources": [
-          "longbench_v2"
-        ]
-      },
-      {
-        "capability_id": "reasoning",
-        "suggestion_type": "build_probe_first",
-        "confidence": "Medium",
-        "expected_gain": 0.0059,
-        "gain_lower": 0.0059,
-        "cost": 1.0,
-        "priority": 0.003,
-        "sources": [
-          "mmlu_pro"
-        ]
-      },
-      {
-        "capability_id": "knowledge.world",
-        "suggestion_type": "targeted_synthesis",
-        "confidence": "Medium",
-        "expected_gain": 0.0059,
-        "gain_lower": 0.0059,
-        "cost": 4.0,
-        "priority": 0.0007,
-        "sources": [
-          "mmlu_pro"
-        ]
-      }
-    ],
-    "suggestions": {
-      "training": [
+    "engine": "rule",
+    "rule_base": {
+      "engine": "rule",
+      "generated_at": "2026-08-24T04:35:13.459318",
+      "low_score_benchmarks": [
         {
-          "capability_id": "knowledge.factual",
-          "suggestion_type": "targeted_synthesis",
-          "confidence": "Medium",
-          "priority_score": 0.0154,
-          "concrete_action": "该能力基本缺失：构造 / 收集针对 knowledge.factual 的高质量训练数据（或引入 更强 teacher 蒸馏），并人工抽检质量后加入训练",
-          "supporting_evidence": [
-            "probe simpleqa: percentile=14.3"
-          ],
-          "expected_gain": 0.1233,
-          "root_cause_type": "",
-          "source": "deterministic",
-          "raw": {}
+          "benchmark_id": "longbench_v2",
+          "score": 38.0,
+          "curve_kind": "params_active",
+          "curve_basis": "同等激活参数量",
+          "percentile": 0.0,
+          "z_score": -2.5635317748282946,
+          "predicted": 0.5367084631853819,
+          "residual": -0.1567084631853819,
+          "shortfall": 0.1567084631853819
         },
         {
-          "capability_id": "long_context",
-          "suggestion_type": "targeted_synthesis",
-          "confidence": "Medium",
-          "priority_score": 0.0082,
-          "concrete_action": "该能力基本缺失：构造 / 收集针对 long_context 的高质量训练数据（或引入 更强 teacher 蒸馏），并人工抽检质量后加入训练",
-          "supporting_evidence": [
-            "probe longbench_v2: percentile=0.0"
-          ],
-          "expected_gain": 0.0653,
-          "root_cause_type": "",
-          "source": "deterministic",
-          "raw": {}
+          "benchmark_id": "mmlu_pro",
+          "score": 50.0,
+          "curve_kind": "params_dense",
+          "curve_basis": "同等参数量(dense)",
+          "percentile": 0.0,
+          "z_score": -5.927644681416815,
+          "predicted": 0.7409822437323859,
+          "residual": -0.24098224373238586,
+          "shortfall": 0.24098224373238586
         },
         {
-          "capability_id": "language.reading",
-          "suggestion_type": "targeted_synthesis",
-          "confidence": "Medium",
-          "priority_score": 0.0082,
-          "concrete_action": "该能力基本缺失：构造 / 收集针对 language.reading 的高质量训练数据（或引入 更强 teacher 蒸馏），并人工抽检质量后加入训练",
-          "supporting_evidence": [
-            "probe mmlu: percentile=6.2"
-          ],
-          "expected_gain": 0.0653,
-          "root_cause_type": "",
-          "source": "deterministic",
-          "raw": {}
+          "benchmark_id": "simpleqa",
+          "score": 24.0,
+          "curve_kind": "params_active",
+          "curve_basis": "同等激活参数量",
+          "percentile": 0.0,
+          "z_score": -2.8654292721844468,
+          "predicted": 0.5036399192713058,
+          "residual": -0.2636399192713058,
+          "shortfall": 0.2636399192713058
+        },
+        {
+          "benchmark_id": "swe_bench",
+          "score": 18.0,
+          "curve_kind": "params_active",
+          "curve_basis": "同等激活参数量",
+          "percentile": 23.076923076923077,
+          "z_score": -0.8118418121798199,
+          "predicted": 0.2867338501393063,
+          "residual": -0.10673385013930631,
+          "shortfall": 0.10673385013930631
+        }
+      ],
+      "missing_capabilities": [
+        {
+          "capability_id": "knowledge",
+          "name": "知识",
+          "level": 1,
+          "evidence": 1.0,
+          "sources": [
+            {
+              "benchmark_id": "simpleqa",
+              "percentile": 0.0,
+              "shortfall": 0.2636
+            },
+            {
+              "benchmark_id": "mmlu_pro",
+              "percentile": 0.0,
+              "shortfall": 0.241
+            }
+          ]
         },
         {
           "capability_id": "knowledge.world",
-          "suggestion_type": "targeted_synthesis",
-          "confidence": "Medium",
-          "priority_score": 0.0007,
-          "concrete_action": "该能力基本缺失：构造 / 收集针对 knowledge.world 的高质量训练数据（或引入 更强 teacher 蒸馏），并人工抽检质量后加入训练",
-          "supporting_evidence": [
-            "probe mmlu: percentile=6.2"
+          "name": "世界知识",
+          "level": 2,
+          "evidence": 0.7388,
+          "sources": [
+            {
+              "benchmark_id": "mmlu_pro",
+              "percentile": 0.0,
+              "shortfall": 0.241
+            }
           ],
-          "expected_gain": 0.0059,
-          "root_cause_type": "",
-          "source": "deterministic",
-          "raw": {}
-        }
-      ],
-      "non_training": [],
-      "build_probe_first": [
-        {
-          "capability_id": "code",
-          "suggestion_type": "build_probe_first",
-          "confidence": "Medium",
-          "priority_score": 0.0247,
-          "concrete_action": "该能力缺少 probe 或 probe 未评测：先建设 / 运行窄口径 probe 集，确认能力缺口后再决定训练动作（code）",
-          "supporting_evidence": [],
-          "expected_gain": 0.0494,
-          "root_cause_type": "",
-          "source": "deterministic",
-          "raw": {}
-        },
-        {
-          "capability_id": "agent.tool_call",
-          "suggestion_type": "build_probe_first",
-          "confidence": "Medium",
-          "priority_score": 0.0247,
-          "concrete_action": "该能力缺少 probe 或 probe 未评测：先建设 / 运行窄口径 probe 集，确认能力缺口后再决定训练动作（agent.tool_call）",
-          "supporting_evidence": [],
-          "expected_gain": 0.0494,
-          "root_cause_type": "",
-          "source": "deterministic",
-          "raw": {}
+          "parent": "knowledge"
         },
         {
           "capability_id": "reasoning",
-          "suggestion_type": "build_probe_first",
-          "confidence": "Medium",
-          "priority_score": 0.003,
-          "concrete_action": "该能力缺少 probe 或 probe 未评测：先建设 / 运行窄口径 probe 集，确认能力缺口后再决定训练动作（reasoning）",
-          "supporting_evidence": [],
-          "expected_gain": 0.0059,
-          "root_cause_type": "",
-          "source": "deterministic",
-          "raw": {}
+          "name": "推理",
+          "level": 1,
+          "evidence": 0.7388,
+          "sources": [
+            {
+              "benchmark_id": "mmlu_pro",
+              "percentile": 0.0,
+              "shortfall": 0.241
+            }
+          ]
+        },
+        {
+          "capability_id": "code",
+          "name": "代码",
+          "level": 1,
+          "evidence": 0.4197,
+          "sources": [
+            {
+              "benchmark_id": "swe_bench",
+              "percentile": 23.1,
+              "shortfall": 0.1067
+            }
+          ]
+        },
+        {
+          "capability_id": "agent.tool_call",
+          "name": "工具调用",
+          "level": 2,
+          "evidence": 0.4197,
+          "sources": [
+            {
+              "benchmark_id": "swe_bench",
+              "percentile": 23.1,
+              "shortfall": 0.1067
+            }
+          ],
+          "parent": "agent"
+        },
+        {
+          "capability_id": "long_context",
+          "name": "长上下文",
+          "level": 1,
+          "evidence": 0.415,
+          "sources": [
+            {
+              "benchmark_id": "longbench_v2",
+              "percentile": 0.0,
+              "shortfall": 0.1567
+            }
+          ]
+        },
+        {
+          "capability_id": "language.reading",
+          "name": "阅读理解",
+          "level": 2,
+          "evidence": 0.415,
+          "sources": [
+            {
+              "benchmark_id": "longbench_v2",
+              "percentile": 0.0,
+              "shortfall": 0.1567
+            }
+          ],
+          "parent": "language"
+        },
+        {
+          "capability_id": "knowledge.factual",
+          "name": "事实性与幻觉抑制",
+          "level": 2,
+          "evidence": 0.2612,
+          "sources": [
+            {
+              "benchmark_id": "simpleqa",
+              "percentile": 0.0,
+              "shortfall": 0.2636
+            }
+          ],
+          "parent": "knowledge"
         }
       ],
-      "human_review": []
-    },
-    "probe_todo": {
-      "build_probe_set": [
-        "reasoning",
-        "code"
-      ],
-      "pending_eval": [
-        "agent.tool_call"
+      "dataset_suggestions": [
+        {
+          "capability_id": "knowledge",
+          "gap": 1.0,
+          "datasets": [
+            {
+              "name": "SimpleQA / HaluEval",
+              "rationale": "短问答事实性与幻觉检测样本，训练\"有依据才回答\"",
+              "expected_effect": "降低无依据编造",
+              "source": "huggingface:openai/simpleqa"
+            },
+            {
+              "name": "TruthfulQA + 引用溯源 SFT 语料",
+              "rationale": "反事实 + 引用格式样本，配合\"不确定即拒答\"模板",
+              "expected_effect": "抑制幻觉、提升引用溯源",
+              "source": "huggingface:truthfulq/truthful_qa"
+            }
+          ],
+          "hyperparameters": [
+            {
+              "knob": "\"不确定即拒答\" SFT 样本配比",
+              "direction": "increase",
+              "typical_range": "5%~15%",
+              "rationale": "教会模型在依据不足时声明不确定而非强行生成"
+            },
+            {
+              "knob": "幻觉成对 DPO（编造 vs 拒答）",
+              "direction": "enable",
+              "typical_range": "β ∈ [0.1, 0.3]",
+              "rationale": "直接校正拒答边界，降低过度自信生成"
+            }
+          ],
+          "verification_benchmarks": [],
+          "tagged_benchmarks": [],
+          "evidence_strength": "high",
+          "intervention_id": "EXP-factuality-001",
+          "note": "事实性：证据链语料 + 不确定即声明不确定（来源：human_expert，匹配度 层级）"
+        },
+        {
+          "capability_id": "knowledge.world",
+          "gap": 0.7388,
+          "datasets": [
+            {
+              "name": "百科 / 开放域 QA（Natural Questions 类）",
+              "rationale": "覆盖事实性知识与检索式问答",
+              "expected_effect": "提升知识回忆准确率",
+              "source": "huggingface:nq_open"
+            },
+            {
+              "name": "ARC / HellaSwag 增强样本",
+              "rationale": "常识推理与物理直觉样本",
+              "expected_effect": "提升常识知识",
+              "source": "huggingface:allenai/ai2_arc"
+            }
+          ],
+          "hyperparameters": [
+            {
+              "knob": "知识语料去重 + 事实一致性过滤",
+              "direction": "enable",
+              "typical_range": "minhash 去重 + 语义冲突剔除",
+              "rationale": "重复与矛盾语料会放大知识错误"
+            },
+            {
+              "knob": "知识类语料在预训练中的配比",
+              "direction": "increase",
+              "typical_range": "提升至 25%~35%",
+              "rationale": "知识容量与语料规模强相关"
+            }
+          ],
+          "verification_benchmarks": [
+            {
+              "benchmark_id": "mmlu",
+              "note": "广度知识，含学科子集"
+            }
+          ],
+          "tagged_benchmarks": [
+            "gpqa",
+            "mmlu",
+            "mmlu_pro",
+            "mmmlu"
+          ],
+          "evidence_strength": "medium",
+          "intervention_id": "EXP-knowledge-001",
+          "note": "世界 / 常识知识：知识语料 + 事实一致性过滤（来源：human_expert，匹配度 精确）"
+        },
+        {
+          "capability_id": "reasoning",
+          "gap": 0.7388,
+          "datasets": [
+            {
+              "name": "GSM8K + MATH（含逐步解答）",
+              "rationale": "多步算术与竞赛级数学推理基础语料",
+              "expected_effect": "提升推理链完整度与符号计算",
+              "source": "huggingface:openai/gsm8k"
+            },
+            {
+              "name": "PRM800K 过程标注",
+              "rationale": "逐步骤正确性标签，用于训练过程奖励模型（PRM）",
+              "expected_effect": "为过程监督提供训练信号",
+              "source": "openai/prm800k"
+            },
+            {
+              "name": "OpenWebMath / Proof-Pile-2",
+              "rationale": "高质量数学预训练语料，补充数学背景知识",
+              "expected_effect": "增强数学直觉与公式能力",
+              "source": "community"
+            }
+          ],
+          "hyperparameters": [
+            {
+              "knob": "reward_model",
+              "direction": "prm_over_orm",
+              "typical_range": "过程监督 PRM 替换结果-only ORM",
+              "rationale": "中间步骤错误在结果级 reward 中不可见"
+            },
+            {
+              "knob": "采样温度 / self-consistency 预算",
+              "direction": "increase",
+              "typical_range": "T ∈ [0.6, 1.0]，投票 5~16 次",
+              "rationale": "多步推理可借采样投票摊薄单次路径错误"
+            }
+          ],
+          "verification_benchmarks": [],
+          "tagged_benchmarks": [
+            "aime24",
+            "aime25",
+            "arc_challenge",
+            "frontiermath",
+            "gpqa",
+            "gsm8k",
+            "livecodebench",
+            "math",
+            "math_500",
+            "mmlu",
+            "mmlu_pro"
+          ],
+          "evidence_strength": "high",
+          "intervention_id": "EXP-math-001",
+          "note": "数学推理：CoT 语料 + 过程监督（来源：human_expert，匹配度 精确）"
+        },
+        {
+          "capability_id": "code",
+          "gap": 0.4197,
+          "datasets": [
+            {
+              "name": "CodeContests + BigCodeBench",
+              "rationale": "竞赛级与指令级代码样本，含单测，强调\"可运行\"",
+              "expected_effect": "提升代码正确性与边界处理",
+              "source": "huggingface:deepmind/code_contests"
+            },
+            {
+              "name": "SWE-bench 轨迹（问题→修复→单测）",
+              "rationale": "真实仓库级问题解决轨迹，训练定位与修复",
+              "expected_effect": "提升 agent 式代码修复能力",
+              "source": "huggingface:princeton-nlp/SWE-bench"
+            }
+          ],
+          "hyperparameters": [
+            {
+              "knob": "执行通过率 reward（单元测试 / pass@k）",
+              "direction": "enable",
+              "typical_range": "RL 阶段以 test 通过为 reward",
+              "rationale": "强化\"可运行\"而非\"看着对\""
+            },
+            {
+              "knob": "代码语料在预训练中的配比",
+              "direction": "increase",
+              "typical_range": "提升至 15%~25%",
+              "rationale": "代码语料不足导致语法与 API 知识薄弱"
+            }
+          ],
+          "verification_benchmarks": [],
+          "tagged_benchmarks": [
+            "bigcodebench",
+            "humaneval",
+            "humaneval_plus",
+            "livecodebench",
+            "swe_bench",
+            "terminal_bench"
+          ],
+          "evidence_strength": "high",
+          "intervention_id": "EXP-code-001",
+          "note": "代码能力：可执行验证 + 代码语料增强（来源：human_expert，匹配度 精确）"
+        },
+        {
+          "capability_id": "agent.tool_call",
+          "gap": 0.4197,
+          "datasets": [
+            {
+              "name": "τ-bench / ToolBench 轨迹",
+              "rationale": "多轮工具调用轨迹（含错误调用与纠正），训练收到工具返回后正确利用",
+              "expected_effect": "降低参数错误与信息忽略",
+              "source": "community"
+            },
+            {
+              "name": "Gorilla 函数调用样本",
+              "rationale": "API 文档感知的函数调用数据，覆盖常见 API",
+              "expected_effect": "提升工具选择与参数生成",
+              "source": "huggingface:gorilla-llm/gorilla-apis"
+            }
+          ],
+          "hyperparameters": [
+            {
+              "knob": "工具调用格式一致性",
+              "direction": "enforce",
+              "typical_range": "统一 function-call schema / JSON",
+              "rationale": "格式不一致会破坏 agent 循环的解析环节"
+            },
+            {
+              "knob": "任务成功率 RL reward",
+              "direction": "enable",
+              "typical_range": "以多轮任务是否成功为 reward",
+              "rationale": "轨迹级成功信号强于单步格式正确"
+            }
+          ],
+          "verification_benchmarks": [
+            {
+              "benchmark_id": "tau2_bench",
+              "note": "工具调用窄口径"
+            }
+          ],
+          "tagged_benchmarks": [
+            "swe_bench",
+            "tau2_bench",
+            "terminal_bench"
+          ],
+          "evidence_strength": "medium",
+          "intervention_id": "EXP-agent-001",
+          "note": "Agent / 工具调用：函数调用轨迹 SFT（来源：human_expert，匹配度 精确）"
+        },
+        {
+          "capability_id": "long_context",
+          "gap": 0.415,
+          "datasets": [
+            {
+              "name": "LongBench 训练版 / L-Eval 长文 QA",
+              "rationale": "覆盖 16 类长文本任务，可拆分为指令微调样本，直接对齐评测分布",
+              "expected_effect": "提升长文档信息定位与多跳抽取",
+              "source": "huggingface:THUDM/LongBench"
+            },
+            {
+              "name": "书级长文档语料（BookSum 类 / 自建 32k-128k 文档）",
+              "rationale": "长上下文继续预训练需要连贯长文档，而非拼接的短文本",
+              "expected_effect": "让模型在真实长文中学会利用远处依赖",
+              "source": "human_expert"
+            }
+          ],
+          "hyperparameters": [
+            {
+              "knob": "rope_scaling / max_position_embeddings",
+              "direction": "extend",
+              "typical_range": "4k -> 32k-128k（linear 或 YaRN 外推）",
+              "rationale": "直接外推可复用预训练权重；YaRN 适合超长输入"
+            },
+            {
+              "knob": "long-context continued-pretraining tokens",
+              "direction": "increase",
+              "typical_range": "50B~200B tokens",
+              "rationale": "仅位置外推不足以激活长文能力，需长文继续预训练"
+            }
+          ],
+          "verification_benchmarks": [
+            {
+              "benchmark_id": "longbench_v2",
+              "note": "长文利用窄口径"
+            }
+          ],
+          "tagged_benchmarks": [
+            "longbench_v2"
+          ],
+          "evidence_strength": "high",
+          "intervention_id": "EXP-longctx-001",
+          "note": "长上下文能力：长文档语料 + 位置编码外推（来源：human_expert，匹配度 精确）"
+        },
+        {
+          "capability_id": "language.reading",
+          "gap": 0.415,
+          "datasets": [
+            {
+              "name": "LongBench 训练版 / L-Eval 长文 QA",
+              "rationale": "覆盖 16 类长文本任务，可拆分为指令微调样本，直接对齐评测分布",
+              "expected_effect": "提升长文档信息定位与多跳抽取",
+              "source": "huggingface:THUDM/LongBench"
+            },
+            {
+              "name": "书级长文档语料（BookSum 类 / 自建 32k-128k 文档）",
+              "rationale": "长上下文继续预训练需要连贯长文档，而非拼接的短文本",
+              "expected_effect": "让模型在真实长文中学会利用远处依赖",
+              "source": "human_expert"
+            }
+          ],
+          "hyperparameters": [
+            {
+              "knob": "rope_scaling / max_position_embeddings",
+              "direction": "extend",
+              "typical_range": "4k -> 32k-128k（linear 或 YaRN 外推）",
+              "rationale": "直接外推可复用预训练权重；YaRN 适合超长输入"
+            },
+            {
+              "knob": "long-context continued-pretraining tokens",
+              "direction": "increase",
+              "typical_range": "50B~200B tokens",
+              "rationale": "仅位置外推不足以激活长文能力，需长文继续预训练"
+            }
+          ],
+          "verification_benchmarks": [
+            {
+              "benchmark_id": "mmlu",
+              "note": "文本理解子集"
+            }
+          ],
+          "tagged_benchmarks": [
+            "hellaswag",
+            "longbench_v2",
+            "mmlu"
+          ],
+          "evidence_strength": "high",
+          "intervention_id": "EXP-longctx-001",
+          "note": "长上下文能力：长文档语料 + 位置编码外推（来源：human_expert，匹配度 精确）"
+        },
+        {
+          "capability_id": "knowledge.factual",
+          "gap": 0.2612,
+          "datasets": [
+            {
+              "name": "SimpleQA / HaluEval",
+              "rationale": "短问答事实性与幻觉检测样本，训练\"有依据才回答\"",
+              "expected_effect": "降低无依据编造",
+              "source": "huggingface:openai/simpleqa"
+            },
+            {
+              "name": "TruthfulQA + 引用溯源 SFT 语料",
+              "rationale": "反事实 + 引用格式样本，配合\"不确定即拒答\"模板",
+              "expected_effect": "抑制幻觉、提升引用溯源",
+              "source": "huggingface:truthfulq/truthful_qa"
+            }
+          ],
+          "hyperparameters": [
+            {
+              "knob": "\"不确定即拒答\" SFT 样本配比",
+              "direction": "increase",
+              "typical_range": "5%~15%",
+              "rationale": "教会模型在依据不足时声明不确定而非强行生成"
+            },
+            {
+              "knob": "幻觉成对 DPO（编造 vs 拒答）",
+              "direction": "enable",
+              "typical_range": "β ∈ [0.1, 0.3]",
+              "rationale": "直接校正拒答边界，降低过度自信生成"
+            }
+          ],
+          "verification_benchmarks": [
+            {
+              "benchmark_id": "simpleqa",
+              "note": "事实性 / 幻觉抑制窄口径"
+            }
+          ],
+          "tagged_benchmarks": [
+            "simpleqa"
+          ],
+          "evidence_strength": "high",
+          "intervention_id": "EXP-factuality-001",
+          "note": "事实性：证据链语料 + 不确定即声明不确定（来源：human_expert，匹配度 精确）"
+        }
       ]
-    },
-    "calibration": {
-      "costs": {},
-      "gain_scale": 1.0,
-      "n_logs": 0
     }
   },
   "scores": {
