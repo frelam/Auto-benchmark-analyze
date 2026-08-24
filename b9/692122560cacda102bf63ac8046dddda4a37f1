@@ -1,0 +1,43 @@
+tests/test_runner.py
+  s_da403a51907582::t_129de76ae8d350 350,352-356
+  s_da403a51907582::t_f94d12e0b10483 351
+  s_da403a51907582::t_968c3b43e34280 318-324
+src/benchmark_diagnosis/runner.py
+  s_da403a51907582::t_a85c7b1a1df9de 712-716,718-719
+  s_da403a51907582::t_05293ec7f2c6c5 554-575,580-598
+  s_da403a51907582::t_ef3e43a62897da 48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "b9692122560cacda102bf63ac8046dddda4a37f1",
+  "prompts": {},
+  "humans": {
+    "h_25cf8a8e4e8b34": {
+      "author": "lvhaoyu <lvhaoyu@huawei.com>"
+    }
+  },
+  "sessions": {
+    "s_da403a51907582": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a8bf7e63286b8e10f3d3b85",
+        "model": "DeepSeek-V4-Flash-Official"
+      },
+      "human_author": "lvhaoyu <lvhaoyu@huawei.com>",
+      "custom_attributes": {
+        "external_session_id": "6a8bf7e63286b8e10f3d3b85",
+        "tool_type": "builtin",
+        "operation_id": "6a8bf8e43286b8e10f3d3bf6",
+        "tool_id": "icube:applyChatSnapshotPatch",
+        "dedupe_key": "6a8bf7e63286b8e10f3d3b85:6a8bf8e43286b8e10f3d3bf6:afterEdit:70dea344",
+        "source_scene": "agent",
+        "client_type": "ide",
+        "runtime_client": "trae-tob-git-ai",
+        "tool_use_id": "6a8bf8e43286b8e10f3d3bf6",
+        "session_id": "6a8bf7e63286b8e10f3d3b85",
+        "edit_kind": "file_edit"
+      }
+    }
+  }
+}
