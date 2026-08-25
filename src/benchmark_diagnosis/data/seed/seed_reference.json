@@ -224,6 +224,18 @@
       "source_url": "https://longbench2.github.io/",
       "note": "THUDM LongBench V2, long-context accuracy 0-shot. >=128k models only.",
       "benchmark_id": "longbench_v2"
+    },
+    {
+      "benchmark_id": "bbh",
+      "name": "BIG-Bench Hard",
+      "scoring_method": "rule_verified",
+      "declared_tags": [
+        "reasoning",
+        "problem_solving",
+        "commonsense_knowledge"
+      ],
+      "source_url": "https://github.com/suzgunmirac/BIG-Bench-Hard",
+      "note": "Big-Bench Hard (23 tasks), few-shot CoT accuracy (0/3-shot)."
     }
   ],
   "models": [
@@ -3607,6 +3619,56 @@
       "model_id": "llama-3.1-8b",
       "benchmark_id": "math",
       "score": 51.9
+    },
+    {
+      "model_id": "llama-2-7b",
+      "benchmark_id": "bbh",
+      "score": 48.7
+    },
+    {
+      "model_id": "llama-2-13b",
+      "benchmark_id": "bbh",
+      "score": 56.9
+    },
+    {
+      "model_id": "llama-2-70b",
+      "benchmark_id": "bbh",
+      "score": 65.3
+    },
+    {
+      "model_id": "mistral-7b",
+      "benchmark_id": "bbh",
+      "score": 67.8
+    },
+    {
+      "model_id": "mixtral-8x7b",
+      "benchmark_id": "bbh",
+      "score": 74.6
+    },
+    {
+      "model_id": "llama-3-8b",
+      "benchmark_id": "bbh",
+      "score": 82.4
+    },
+    {
+      "model_id": "llama-3-70b",
+      "benchmark_id": "bbh",
+      "score": 88.3
+    },
+    {
+      "model_id": "gpt-3.5-turbo",
+      "benchmark_id": "bbh",
+      "score": 83.6
+    },
+    {
+      "model_id": "gpt-4",
+      "benchmark_id": "bbh",
+      "score": 89.0
+    },
+    {
+      "model_id": "deepseek-r1",
+      "benchmark_id": "bbh",
+      "score": 92.0
     }
   ]
 }

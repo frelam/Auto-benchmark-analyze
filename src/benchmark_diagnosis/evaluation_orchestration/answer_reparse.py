@@ -66,6 +66,19 @@ def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _normalize_free(text: str) -> str:
+    """Normalize free-form answers, keeping bracket characters that are data.
+
+    Dyck-style closing sequences (e.g. ``] ] >``) use brackets as the answer
+    itself, so unlike :func:`_normalize` we must not strip ``()[]<>{}``.
+    Brackets are surrounded by spaces so they tokenize separately from an
+    adjacent digit in list answers (``[3, 1, 2]`` -> ``[ 3 1 2 ]``).
+    """
+    text = re.sub(r"[^a-z0-9<>\[\]{}()\s]", " ", str(text).lower())
+    text = re.sub(r"([<>\[\]{}()])", r" \1 ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def _answer_kind(target: str) -> str:
     t = target.strip()
     if re.fullmatch(r"\(?[a-z0-9]\)?", t, re.IGNORECASE):
@@ -94,25 +107,35 @@ def _matches(extracted: str, target: str) -> bool:
             return True
         return _normalize(extracted).split()[-1:] == [letter]
     if kind == "enumerated":
-        last = _normalize(extracted).split()
-        if not last:
+        toks = _normalize(extracted).split()
+        if not toks:
             return False
-        if last[-1] != target.strip().lower():
-            return False
-        # "not valid" / "not true" is a negation, never a match for the bare gold.
-        return not (len(last) >= 2 and last[-2] == "not")
+        gold = target.strip().lower()
+        # The model may answer with a leading verdict ("A: Yes. John ...") or a
+        # standalone one ("A: no"). Accept either being equal to the gold, but a
+        # negation ("not yes") never counts.
+        def _eligible(toks):
+            return not (toks and toks[0] == "not")
+        if toks[0] == gold and _eligible(toks):
+            return True
+        if len(toks) >= 2 and toks[-1] == gold and _eligible(toks[:1]):
+            # "Answer: yes" (single token) handled above; the last-token case is
+            # meant for standalone forms — keep it but reject a lexical negation.
+            return not (len(toks) >= 2 and toks[-2] == "not")
+        return False
     # free-form
-    e, t = _normalize(extracted), _normalize(target)
+    e, t = _normalize_free(extracted), _normalize_free(target)
     if not e or not t:
         return False
     if e == t:
         return True
+    # tolerate a list wrapper: "[3, 1, 2]" == gold "3 1 2" after stripping the
+    # surrounding brackets. Everything else must match exactly (and a longer
+    # bracket sequence like "] ] ] >" never equals the gold "] ] >").
     ew, tw = e.split(), t.split()
-    if not tw:
-        return False
-    # order-preserving subsequence (tolerates list wrapping / extra punctuation)
-    it = iter(ew)
-    return all(any(w == tok for w in it) for tok in tw) if tw else False
+    if len(ew) >= 2 and ew[0] in "([{<" and ew[-1] in ")]}>" and ew[-1] not in ew[1:-1]:
+        ew = ew[1:-1]
+    return ew == tw
 
 
 def re_score_samples(samples: list[dict[str, Any]]) -> tuple[int, int, int]:

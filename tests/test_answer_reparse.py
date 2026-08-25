@@ -55,6 +55,34 @@ def test_enumerated_uses_last_token():
     assert re_score_samples(good)[0] == 1
 
 
+def test_enumerated_accepts_leading_verdict_in_sentence():
+    # sports_understanding gold is yes/no but the model reasons in prose
+    # ("A: Yes. John ... hockey"), so the verdict is the first token.
+    cases = [
+        ("A: Yes.", "yes"),
+        ("A: No.", "no"),
+        ("A: Yes. John Carlson is a hockey player.", "yes"),
+        ("A: No. As of my knowledge this is wrong.", "no"),
+    ]
+    good = [_sample(resp, gold) for resp, gold in cases]
+    assert re_score_samples(good)[0] == len(cases)
+    assert re_score_samples(good)[2] == len(cases)  # all were [invalid] before
+
+
+def test_free_form_keeps_brackets_as_data():
+    # dyck_languages gold is a closing-bracket sequence; brackets must not be
+    # stripped, otherwise the answer normalizes to empty and never matches.
+    cases = [
+        ("A: ] ]", "] ]"),
+        ("A: ] ] >", "] ] >"),
+        ("A: ) >", ") >"),
+    ]
+    bad = [_sample("A: ] ] ] >", "] ] >", filtered=["[invalid]"])]
+    good = [_sample(resp, gold, filtered=["[invalid]"]) for resp, gold in cases]
+    assert re_score_samples(good)[0] == len(cases)
+    assert re_score_samples(bad)[0] == 0
+
+
 def test_free_form_exact_and_subsequence():
     exact = [_sample("A: 42", "42", filtered=["[invalid]"])]
     assert re_score_samples(exact)[0] == 1
