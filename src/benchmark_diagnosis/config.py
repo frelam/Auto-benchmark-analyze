@@ -58,6 +58,14 @@ class EvaluationConfig(BaseModel):
     timeout: int | None = None
     confirm_run_unsafe_code: bool = False
     apply_chat_template: bool = False
+    # Chat/RL-trained models (especially ``apply_chat_template``) often wrap
+    # answers so lm-eval's ``get-answer`` filter drops them (``filtered_resps
+    # == ["[invalid]"]``), understating real capability. When true, scores are
+    # re-derived from the raw sample logs in ``output_dir`` with the strict
+    # reparse scorer. Only tasks whose samples are dominated by ``[invalid]``
+    # filtered outputs are rewritten; tasks lm-eval parsed correctly are left
+    # untouched. No-op when no ``samples_*.jsonl`` exist for a task.
+    reparse_scores: bool = True
 
 
 class ServingConfig(BaseModel):

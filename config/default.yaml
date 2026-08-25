@@ -44,6 +44,11 @@ evaluation:
   # on bare prompts; log-likelihood tasks (mmlu etc.) keep working because the
   # wire protocol stays completions. Needs `tokenizer` above.
   apply_chat_template: false
+  # Chat/RL-trained models often wrap answers so lm-eval's get-answer filter
+  # drops them ([invalid]) and marks them 0, understating real capability.
+  # When true, scores are re-derived from the samples_*.jsonl logs with the
+  # strict reparse scorer; only [invalid]-dominated tasks are rewritten.
+  reparse_scores: true
 
 serving:
   engine: vllm             # vllm (sglang planned)

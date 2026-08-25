@@ -355,6 +355,8 @@ def execute_run(
         raw_scores, results_payload = _collect_scores(
             request, base_url, portfolio_ids, run_harness, settings
         )
+        if settings.evaluation.reparse_scores:
+            raw_scores = _reparse_scores(raw_scores, settings)
 
         if raw_scores and not (portfolio_ids & set(raw_scores)):
             console.print(
@@ -521,6 +523,38 @@ def get_or_build_model(
         active_params=params,
         release_date=dt.date.fromisoformat(release_date) if release_date else None,
     )
+
+
+def _reparse_scores(
+    raw_scores: dict[str, float], settings: Settings
+) -> dict[str, float]:
+    """Re-derive scores from raw sample logs for tasks the get-answer filter dropped.
+
+    Uses the strictly-typed reparse scorer (:mod:`answer_reparse`): tasks whose
+    samples are dominated by ``["[invalid]"]`` filtered outputs are recomputed
+    from the raw ``resps``; tasks lm-eval parsed correctly are left untouched.
+    No-op (returns the input unchanged) when no ``samples_*.jsonl`` exist or no
+    task is [invalid]-dominated.
+    """
+    from benchmark_diagnosis.evaluation_orchestration.answer_reparse import reparse_scores
+    from benchmark_diagnosis.evaluation_orchestration.artifacts import find_sample_files
+
+    sample_files = find_sample_files(settings.evaluation.output_dir)
+    if not sample_files:
+        return raw_scores
+    corrected = reparse_scores(sample_files, raw_scores)
+    rewritten = [
+        t for t in corrected if t in raw_scores and corrected[t] != raw_scores[t]
+    ]
+    if rewritten:
+        console.print("[dim]reparse scorer rewrote:[/]")
+        for t in rewritten:
+            console.print(
+                f"  [dim]{t}: {raw_scores[t]:.3f} -> {corrected[t]:.3f}[/]"
+            )
+    merged = dict(raw_scores)
+    merged.update(corrected)
+    return merged
 
 
 def _collect_scores(
