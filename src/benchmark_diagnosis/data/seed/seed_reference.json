@@ -236,6 +236,18 @@
       ],
       "source_url": "https://github.com/suzgunmirac/BIG-Bench-Hard",
       "note": "Big-Bench Hard (23 tasks), few-shot CoT accuracy (0/3-shot)."
+    },
+    {
+      "benchmark_id": "bfcl",
+      "name": "BFCL",
+      "scoring_method": "rule_verified",
+      "declared_tags": [
+        "agentic_tool_use",
+        "tool_call",
+        "function_calling"
+      ],
+      "source_url": "https://gorilla.cs.berkeley.edu/leaderboard.html",
+      "note": "Berkeley Function Calling Leaderboard (Gorilla). Overall accuracy, multi-turn native tool calling. Evaluated by the official bfcl harness (not lm-eval); reference values are approximate leaderboard estimates used to bootstrap expectation curves."
     }
   ],
   "models": [

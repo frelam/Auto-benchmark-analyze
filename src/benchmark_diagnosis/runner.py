@@ -51,6 +51,7 @@ from benchmark_diagnosis.evaluation_orchestration.harness_bridge import (
     task_headline,
 )
 from benchmark_diagnosis.evaluation_orchestration.task_registry import (
+    evaluable_backend,
     to_lm_eval_task_list,
 )
 from benchmark_diagnosis.pipeline import _revive_curves, build_offline, diagnose_model
@@ -563,12 +564,17 @@ def _collect_scores(
     portfolio_ids: set[str],
     run_harness: Callable[[list[str]], dict[str, Any]],
     settings: Settings,
+    *,
+    run_bfcl: Callable[..., dict[str, float]] | None = None,
 ) -> tuple[dict[str, float], dict[str, Any]]:
     """Load scores from a file, or evaluate the portfolio and flatten the results.
 
     Returns ``(raw_scores, results_payload)`` — the second element is the
     parsed harness results dict (empty for the ``--scores`` path) and feeds
     the evaluation-artifact archiving (bad-case extraction).
+
+    ``run_bfcl`` is the native BFCL backend (default :func:`bfcl_eval.run_bfcl`);
+    it is injected so tests can drive the BFCL path without the optional package.
     """
     if request.source == "scores":
         scores_path = request.scores_file
@@ -652,7 +658,30 @@ def _collect_scores(
     # downstream bad-case archiving sees the same combined results as before.
     raw_scores: dict[str, float] = {}
     results: dict[str, Any] = {}
+    run_bfcl = run_bfcl or _import_bfcl()
     for i, task in enumerate(lm_eval_tasks, 1):
+        # BFCL-only benchmarks run on their own multi-turn harness, not lm-eval.
+        if evaluable_backend(task) == "bfcl":
+            console.print(
+                f"[cyan][{i}/{len(lm_eval_tasks)}] Evaluating (BFCL) {task}[/]"
+            )
+            try:
+                bfcl_scores = run_bfcl(
+                    request.model,
+                    base_url,
+                    categories=settings.evaluation.bfcl_categories,
+                    model_type=settings.evaluation.bfcl_model_type,
+                )
+            except RuntimeError as exc:
+                console.print(f"[red]BFCL evaluation failed: {exc}[/]")
+                raise
+            raw_scores.update(bfcl_scores)
+            results.setdefault("bfcl", {}).update(bfcl_scores)
+            if "bfcl" in bfcl_scores:
+                console.print(f"  [green]{task}: {bfcl_scores['bfcl']:.3f}[/]")
+            for cat in sorted(k for k in bfcl_scores if k != "bfcl"):
+                console.print(f"  [dim]  {cat}: {bfcl_scores[cat]:.3f}[/]")
+            continue
         cmd = _cmd(task)
         console.print(f"[cyan][{i}/{len(lm_eval_tasks)}] Evaluating {task}[/]")
         console.print("[dim]  " + " ".join(cmd) + "[/]")
@@ -665,6 +694,13 @@ def _collect_scores(
         raw_scores.update(extract_scores(task_results))
         _print_task_score(task, task_results)
     return raw_scores, results
+
+
+def _import_bfcl() -> Callable[..., dict[str, float]]:
+    """Import the native BFCL backend lazily (deferred so tests/deps stay light)."""
+    from benchmark_diagnosis.evaluation_orchestration.bfcl_eval import run_bfcl
+
+    return run_bfcl
 
 
 def _archive_eval_artifacts(

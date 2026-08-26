@@ -11,6 +11,7 @@ from benchmark_diagnosis.core import db
 from benchmark_diagnosis.data import ingestion
 from benchmark_diagnosis.runner import (
     RunRequest,
+    _collect_scores,
     build_run_request,
     execute_run,
 )
@@ -544,3 +545,40 @@ def test_build_run_request_diagnose_defaults(run_env):
     )
     assert request.diagnose is False
     assert request.engine == "llm_agent"
+
+
+def test_collect_scores_routes_bfcl_to_its_own_backend(run_env):
+    """A BFCL-only benchmark runs on the native harness, not lm-eval, and its
+    scores merge into the tool-namespace raw_scores (bfcl + bfcl.<category>)."""
+    settings, tmp_path, scores_path = run_env
+    request = RunRequest(
+        model="llama-3-8b",
+        source="weights",
+        weights="meta-llama/Llama-3-8B",
+        benchmarks=["bfcl"],
+    )
+    harness_calls = []
+    bfcl_calls = []
+
+    def fake_bfcl(model, base_url, **kwargs):
+        bfcl_calls.append((model, base_url, kwargs))
+        return {"bfcl": 0.72, "bfcl.simple": 0.85, "bfcl.multi_turn": 0.6}
+
+    raw, results = _collect_scores(
+        request,
+        base_url="http://127.0.0.1:8000/v1",
+        portfolio_ids=set(),
+        run_harness=lambda cmd: harness_calls.append(cmd) or {},
+        settings=settings,
+        run_bfcl=fake_bfcl,
+    )
+
+    assert harness_calls == []  # lm-eval must not be invoked for bfcl
+    assert len(bfcl_calls) == 1
+    model, base_url, kwargs = bfcl_calls[0]
+    assert model == "llama-3-8b"
+    assert base_url == "http://127.0.0.1:8000/v1"
+    assert kwargs["model_type"] == settings.evaluation.bfcl_model_type
+    assert kwargs["categories"] == settings.evaluation.bfcl_categories
+    assert raw == {"bfcl": 0.72, "bfcl.simple": 0.85, "bfcl.multi_turn": 0.6}
+    assert results["bfcl"] == {"bfcl": 0.72, "bfcl.simple": 0.85, "bfcl.multi_turn": 0.6}

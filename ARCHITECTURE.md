@@ -31,6 +31,19 @@ and only writing the parts that are unique to this project.
   (`bbh`/`humaneval`/`ifeval`: `until` → chat EOS, `max_gen_toks` → configured value,
   humaneval filters the thinking block / markdown fences out of completions).
   Best-effort: an unresolvable venv only logs a warning, never fails the run.
+- **Non-lm-eval backends**: some benchmark families need agentic/scored tool-calling
+  rather than single-turn scalar MC, so they route to their own harness instead. Each
+  id resolves via `evaluation_orchestration/task_registry.py::evaluable_backend` →
+  `"lm_eval"` (default) or a native backend name. Today **`bfcl`** routes to
+  `evaluation_orchestration/bfcl_eval.py`, which wraps the official Gorilla
+  `bfcl-eval` harness against our vLLM `/v1` endpoint and returns its scores as flat
+  keys in the tool's score namespace — `bfcl` (overall) plus `bfcl.<category>`
+  per category — merged straight into `raw_scores` and archived/judged like any other
+  benchmark. Cluster attribution only counts keys that overlap a representative
+  portfolio, so a BFCL run that produces no portfolio-overlapping id simply yields no
+  cluster verdict (same as any non-overlapping benchmark). It lives behind the `bfcl`
+  extras (`pip install .[bfcl]`); categories / model type are configurable via
+  `settings.evaluation.bfcl_categories` / `bfcl_model_type`.
 
 ## 2. Weight deployment — reuse `vLLM`
 

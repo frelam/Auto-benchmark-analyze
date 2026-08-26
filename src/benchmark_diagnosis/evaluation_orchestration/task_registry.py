@@ -45,6 +45,11 @@ _EVALUABLE_IDENTITY = {
 # Reverse map: lm-eval task name -> benchmark_id.
 _TASK_TO_ID = {task: bid for bid, task in TASK_ALIASES.items()}
 
+# Benchmark ids evaluated by the native BFCL backend (multi-turn tool calling,
+# see ``evaluation_orchestration/bfcl_eval.py``). These have their own harness
+# and must never be handed to lm-eval.
+BFCL_ONLY_IDS = {"bfcl"}
+
 
 def to_lm_eval_task(benchmark_id: str) -> str | None:
     """Return the lm-eval task name for a benchmark id, or None if missing."""
@@ -52,6 +57,22 @@ def to_lm_eval_task(benchmark_id: str) -> str | None:
         return TASK_ALIASES[benchmark_id]
     if benchmark_id in _EVALUABLE_IDENTITY:
         return benchmark_id
+    return None
+
+
+def evaluable_backend(benchmark_id: str) -> str | None:
+    """Return the evaluation backend a benchmark runs on, or None if unknown here.
+
+    ``lm_eval`` benchmarks go through ``harness_bridge.build_command``; ``bfcl``
+    benchmarks go through ``evaluation_orchestration/bfcl_eval.run_bfcl``. The
+    offline asset build and the runner both use this so a requested benchmark is
+    either run by the right harness or surfaced as unevaluable — never silently
+    mis-routed to lm-eval.
+    """
+    if to_lm_eval_task(benchmark_id):
+        return "lm_eval"
+    if benchmark_id in BFCL_ONLY_IDS:
+        return "bfcl"
     return None
 
 

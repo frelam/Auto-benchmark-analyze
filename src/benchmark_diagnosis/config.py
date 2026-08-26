@@ -66,6 +66,14 @@ class EvaluationConfig(BaseModel):
     # filtered outputs are rewritten; tasks lm-eval parsed correctly are left
     # untouched. No-op when no ``samples_*.jsonl`` exist for a task.
     reparse_scores: bool = True
+    # Native BFCL (function/tool calling) evaluation, used when ``--benchmarks``
+    # includes a BFCL-only benchmark id (``bfcl``). ``bfcl_categories``
+    # optionally narrows to a subset of BFCL categories (None => the harness
+    # default set; category ids are version-specific). ``bfcl_model_type`` tells
+    # the harness how to reach the endpoint (default ``vllm`` to match this
+    # tool's vLLM deployment; ``openai`` works for any OpenAI-compatible server).
+    bfcl_categories: list[str] | None = None
+    bfcl_model_type: str = "vllm"
 
 
 class ServingConfig(BaseModel):

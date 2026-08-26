@@ -49,6 +49,13 @@ evaluation:
   # When true, scores are re-derived from the samples_*.jsonl logs with the
   # strict reparse scorer; only [invalid]-dominated tasks are rewritten.
   reparse_scores: true
+  # Native BFCL (Berkeley Function Calling Leaderboard; multi-turn tool calling)
+  # evaluation. Used when --benchmarks includes the `bfcl` benchmark id; routed
+  # to the official `bfcl` harness (optional dependency `pip install -e '.[bfcl]'`)
+  # instead of lm-eval. Requires the endpoint to support native tool calling
+  # (vLLM: --enable-auto-tool-choice --tool-call-parser; see serving.extra_args).
+  bfcl_categories: null        # optional subset of BFCL categories; null => harness default
+  bfcl_model_type: vllm        # vllm (matches our vLLM deploy) or openai
 
 serving:
   engine: vllm             # vllm (sglang planned)

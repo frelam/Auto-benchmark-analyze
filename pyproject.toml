@@ -39,6 +39,13 @@ dependencies = [
 mirt = ["torch>=2.0"]
 # Evaluation bridge to EleutherAI lm-evaluation-harness.
 eval = ["lm-eval>=0.4"]
+# Native BFCL (Berkeley Function Calling Leaderboard) evaluation: the official
+# Gorilla harness (`bfcl-eval`, module `bfcl_eval`) plus the OpenAI client it
+# needs to reach a pre-existing OpenAI-compatible (vLLM/SGLang) endpoint.
+# Without this the `bfcl` benchmark id has no backend; installing it enables
+# the BFCL tool-calling eval path. Do NOT confuse with the unrelated `bfcl`
+# project on PyPI.
+bfcl = ["bfcl-eval>=1.0", "openai>=1"]
 # Weight -> OpenAI-compatible serving via vLLM (heavy; install in the GPU env).
 serve = ["vllm>=0.6"]
 # Chart rendering for `benchmark-diagnosis visualize` (README / report figures).

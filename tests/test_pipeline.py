@@ -58,6 +58,28 @@ def test_build_offline_and_diagnose(seeded_session):
         assert "diagnosis" in cluster
 
 
+def test_build_offline_does_not_skip_bfcl(seeded_session):
+    """bfcl is evaluable through its own native backend, so build_offline must
+    not drop it from the coverage used for representative portfolio selection
+    (unlike lm-eval-only ids with no task in this environment). build_offline
+    runs, and the routing gate reports a backend for bfcl."""
+    from benchmark_diagnosis.evaluation_orchestration.task_registry import (
+        evaluable_backend,
+    )
+
+    session, settings = seeded_session
+    versions = build_offline(session, settings)
+
+    # The skipping message (stderr captures) came from the 8 lm-eval-only ids;
+    # bfcl resolves to a backend here and stays eligible for portfolios.
+    assert evaluable_backend("bfcl") == "bfcl"
+    # Coverage/portfolio assets still build with the BFCL-inclusive registry.
+    portfolio = db.load_asset_by_version(
+        session, "portfolio", versions["portfolio_version"]
+    )
+    assert isinstance(portfolio, list)
+
+
 def test_diagnose_analyze_mode_skips_recommendations(seeded_session):
     session, settings = seeded_session
     build_offline(session, settings)
