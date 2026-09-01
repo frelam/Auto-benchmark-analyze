@@ -50,6 +50,18 @@ _TASK_TO_ID = {task: bid for bid, task in TASK_ALIASES.items()}
 # and must never be handed to lm-eval.
 BFCL_ONLY_IDS = {"bfcl"}
 
+# Benchmark ids evaluated by generic native backends (interactive / agentic /
+# judge / sandbox-scored families that do not map onto lm-eval's single-pass
+# task model; see ``evaluation_orchestration/native_engine.py``). Each routes
+# to the native runner and is never handed to lm-eval.
+NATIVE_INTERACTIVE_IDS = {
+    "arena_hard",  # LLM-as-a-judge pairwise comparison
+    "livecodebench",  # sandbox-scored competition coding (v5)
+    "codeforces",  # sandbox-scored competitive programming
+    "livebench",  # continuously-updated objective benchmark
+    "multiif",  # multi-turn instruction following
+}
+
 
 def to_lm_eval_task(benchmark_id: str) -> str | None:
     """Return the lm-eval task name for a benchmark id, or None if missing."""
@@ -64,15 +76,18 @@ def evaluable_backend(benchmark_id: str) -> str | None:
     """Return the evaluation backend a benchmark runs on, or None if unknown here.
 
     ``lm_eval`` benchmarks go through ``harness_bridge.build_command``; ``bfcl``
-    benchmarks go through ``evaluation_orchestration/bfcl_eval.run_bfcl``. The
-    offline asset build and the runner both use this so a requested benchmark is
-    either run by the right harness or surfaced as unevaluable — never silently
-    mis-routed to lm-eval.
+    benchmarks go through ``evaluation_orchestration/bfcl_eval.run_bfcl``;
+    ``native`` benchmarks go through ``evaluation_orchestration/native_engine``.
+    The offline asset build and the runner both use this so a requested
+    benchmark is either run by the right harness or surfaced as unevaluable —
+    never silently mis-routed to lm-eval.
     """
     if to_lm_eval_task(benchmark_id):
         return "lm_eval"
     if benchmark_id in BFCL_ONLY_IDS:
         return "bfcl"
+    if benchmark_id in NATIVE_INTERACTIVE_IDS:
+        return "native"
     return None
 
 

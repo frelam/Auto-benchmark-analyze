@@ -56,6 +56,14 @@ evaluation:
   # (vLLM: --enable-auto-tool-choice --tool-call-parser; see serving.extra_args).
   bfcl_categories: null        # optional subset of BFCL categories; null => harness default
   bfcl_model_type: vllm        # vllm (matches our vLLM deploy) or openai
+  # Generic native-backend benchmarks (see evaluation_orchestration/native_engine.py).
+  # These do NOT run through lm-eval: arena_hard, livecodebench, codeforces,
+  # livebench, multiif. Selecting them via `--benchmarks` generates + archives
+  # model completions under evaluation.output_dir. Real scores require an
+  # external component (judge model / code sandbox / official harness) that is
+  # not yet wired in — until then generations are archived for later judging
+  # and the score map stays empty. Reuses `limit` / `max_gen_toks` / `timeout`
+  # / `output_dir` above.
 
 serving:
   engine: vllm             # vllm (sglang planned)

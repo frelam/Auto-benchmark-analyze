@@ -248,6 +248,68 @@
       ],
       "source_url": "https://gorilla.cs.berkeley.edu/leaderboard.html",
       "note": "Berkeley Function Calling Leaderboard (Gorilla). Overall accuracy, multi-turn native tool calling. Evaluated by the official bfcl harness (not lm-eval); reference values are approximate leaderboard estimates used to bootstrap expectation curves."
+    },
+    {
+      "benchmark_id": "arena_hard",
+      "name": "Arena-Hard-Auto",
+      "scoring_method": "llm_as_judge",
+      "declared_tags": [
+        "instruction_following",
+        "preference",
+        "chat"
+      ],
+      "version": "v1.0",
+      "source_url": "https://github.com/lm-sys/arena-hard-auto",
+      "note": "Arena-Hard-Auto: automatic pairwise LLM-as-a-judge benchmark (500 instruction-tuning cases with verified reference answers). Requires an external judge model to score pairwise comparisons; routed to the native backend (not lm-eval). Reference values are approximate leaderboard estimates used to bootstrap expectation curves."
+    },
+    {
+      "benchmark_id": "livecodebench",
+      "name": "LiveCodeBench v5",
+      "scoring_method": "code_execution",
+      "declared_tags": [
+        "code",
+        "competition_programming",
+        "agentic"
+      ],
+      "version": "v5",
+      "source_url": "https://github.com/LiveCodeBench/LiveCodeBench",
+      "note": "LiveCodeBench v5: contamination-free competition coding benchmark (LeetCode/AtCoder/Codeforces). Scored by running generated code against hidden test cases in a sandbox (pass@1). Routed to the native backend (not lm-eval); requires a code-execution sandbox. Reference values are approximate leaderboard estimates used to bootstrap expectation curves."
+    },
+    {
+      "benchmark_id": "codeforces",
+      "name": "Codeforces",
+      "scoring_method": "code_execution",
+      "declared_tags": [
+        "code",
+        "competition_programming"
+      ],
+      "version": "2023",
+      "source_url": "https://huggingface.co/datasets/deepmind/codecontests",
+      "note": "Codeforces (CodeContests): competitive-programming problems scored by running generated code against public/private unit tests in a sandbox. Routed to the native backend (not lm-eval); requires a code-execution sandbox. Reference values are approximate leaderboard estimates used to bootstrap expectation curves."
+    },
+    {
+      "benchmark_id": "livebench",
+      "name": "LiveBench",
+      "scoring_method": "rule_verified",
+      "declared_tags": [
+        "comprehensive",
+        "objective",
+        "live"
+      ],
+      "source_url": "https://github.com/LiveBench/LiveBench",
+      "note": "LiveBench: contamination-resistant, continuously-updated benchmark with objective/verifiable answers (math, coding, reasoning, language). Routed to the native backend (not lm-eval); scoring uses the official per-release answers/harness. Reference values are approximate leaderboard estimates used to bootstrap expectation curves."
+    },
+    {
+      "benchmark_id": "multiif",
+      "name": "MultiIF",
+      "scoring_method": "multi_turn_rule",
+      "declared_tags": [
+        "instruction_following",
+        "multi_turn"
+      ],
+      "version": "v1",
+      "source_url": "https://github.com/SalesforceAIResearch/MultiIF",
+      "note": "MultiIF (Salesforce): multi-turn instruction-following benchmark, each case bundles multiple dependent instructions with typed answers. Needs multi-turn agentic interaction + instruction-following scoring. Routed to the native backend (not lm-eval). Reference values are approximate leaderboard estimates used to bootstrap expectation curves."
     }
   ],
   "models": [

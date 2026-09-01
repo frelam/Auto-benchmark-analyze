@@ -566,6 +566,7 @@ def _collect_scores(
     settings: Settings,
     *,
     run_bfcl: Callable[..., dict[str, float]] | None = None,
+    run_native: Callable[..., tuple[dict[str, float], dict[str, Any]]] | None = None,
 ) -> tuple[dict[str, float], dict[str, Any]]:
     """Load scores from a file, or evaluate the portfolio and flatten the results.
 
@@ -574,7 +575,9 @@ def _collect_scores(
     the evaluation-artifact archiving (bad-case extraction).
 
     ``run_bfcl`` is the native BFCL backend (default :func:`bfcl_eval.run_bfcl`);
-    it is injected so tests can drive the BFCL path without the optional package.
+    ``run_native`` is the generic native backend (default
+    :func:`native_engine.run_native`). Both are injected so tests can drive
+    those paths without the optional packages.
     """
     if request.source == "scores":
         scores_path = request.scores_file
@@ -659,6 +662,7 @@ def _collect_scores(
     raw_scores: dict[str, float] = {}
     results: dict[str, Any] = {}
     run_bfcl = run_bfcl or _import_bfcl()
+    run_native = run_native or _import_native()
     for i, task in enumerate(lm_eval_tasks, 1):
         # BFCL-only benchmarks run on their own multi-turn harness, not lm-eval.
         if evaluable_backend(task) == "bfcl":
@@ -682,6 +686,40 @@ def _collect_scores(
             for cat in sorted(k for k in bfcl_scores if k != "bfcl"):
                 console.print(f"  [dim]  {cat}: {bfcl_scores[cat]:.3f}[/]")
             continue
+        # Generic native benchmarks (judge / sandbox / multi-turn families) run
+        # on their own native backend; they may archive generations without yet
+        # producing a score when an external component (judge/sandbox) is absent.
+        if evaluable_backend(task) == "native":
+            console.print(
+                f"[cyan][{i}/{len(lm_eval_tasks)}] Evaluating (native) {task}[/]"
+            )
+            native_scores, native_payload = run_native(
+                request.model,
+                base_url,
+                task,
+                limit=settings.evaluation.limit,
+                output_dir=Path(settings.evaluation.output_dir),
+                max_tokens=settings.evaluation.max_gen_toks,
+                timeout_seconds=(
+                    settings.evaluation.timeout if settings.evaluation.timeout else 120.0
+                ),
+            )
+            raw_scores.update(native_scores)
+            results.setdefault("native", {}).update(native_payload.get("native", {}))
+            info = (results.get("native") or {}).get(task) or {}
+            if info.get("scored"):
+                console.print(
+                    f"  [green]{task}: {native_scores.get(task, 0.0):.3f}[/]"
+                )
+            else:
+                missing = ", ".join(info.get("missing_external", [])) or "none"
+                console.print(
+                    f"  [yellow]{task}: {info.get('cases', 0)} case(s) archived; "
+                    f"score needs external component(s): {missing}[/]"
+                )
+                if info.get("archived"):
+                    console.print(f"  [dim]  {info['archived']}[/]")
+            continue
         cmd = _cmd(task)
         console.print(f"[cyan][{i}/{len(lm_eval_tasks)}] Evaluating {task}[/]")
         console.print("[dim]  " + " ".join(cmd) + "[/]")
@@ -701,6 +739,13 @@ def _import_bfcl() -> Callable[..., dict[str, float]]:
     from benchmark_diagnosis.evaluation_orchestration.bfcl_eval import run_bfcl
 
     return run_bfcl
+
+
+def _import_native() -> Callable[..., tuple[dict[str, float], dict[str, Any]]]:
+    """Import the generic native backend lazily (deferred so tests/deps stay light)."""
+    from benchmark_diagnosis.evaluation_orchestration.native_engine import run_native
+
+    return run_native
 
 
 def _archive_eval_artifacts(
