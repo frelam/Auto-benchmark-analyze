@@ -14,14 +14,19 @@
   ``build_predictions`` 拼出的代码 → 语法错误直接 0 分；模板
   ``max_gen_toks: 1024`` 同样压过配置值。
 * ``ifeval``: ``until: []`` 无碍（harness 会自动补 eos），但模板
-  ``max_gen_toks: 1280`` 会截断长思考 + 长输出。
+  ``max_gen_toks: 1280`` 会截断长思考 + 长输出；且校验器把整条生成串当正文
+  判断（词数/段落/起始/JSON 等），思考块会污染分数，故额外在 ``utils.py``
+  的 ``process_results`` 里剥掉  thinking...response 块再送校验。
 
 已审计、无需修补的任务：``gsm8k``（until 已含 ``<|im_end|>``，无模板
 max_gen_toks）、``aime24``/``aime25``（until 已含 ``<|im_end|>`` +
 ``<|eot_id|>``，max_gen_toks 32768）、``hendrycks_math`` 7 个子任务
-（until ``["Problem:"]`` 对 chat 输出无害，\boxed 正则全文本扫描）、
-``mmlu``/``mmlu_pro``/``longbench2``/``arc_challenge``/``hellaswag``/
-``mmmlu``（multiple_choice / loglikelihood，不走生成）。
+（until ``["Problem:"]`` 对 chat 输出无害，\boxed 正则全文本扫描）。
+``mmlu`` 虽属 ``multiple_choice``/loglikelihood，但 chat 模型下在 assistant
+标记后接裸选项字母算续写概率、分布被思考/填充占满，系统性失真，故改写为
+ ``generate_until`` 生成自然答案加正则抽字母判分（见 ``_patch_mmlu_default``）。
+``mmlu_pro``/``longbench2``/``arc_challenge``/``hellaswag``/``mmmlu`` 为
+同类 latent 问题，超出本次修补范围。
 
 修补只在本工具以 ``apply_chat_template=True`` 评估 chat 模型、且任务列表
 命中注册表时触发（见 :func:`prepare_chat_template_eval`），并保持幂等：
@@ -45,11 +50,55 @@ _TASK_TEMPLATES: dict[str, str] = {
     "bbh": "bbh/cot_fewshot/_cot_fewshot_template_yaml",
     "humaneval": "humaneval/humaneval.yaml",
     "ifeval": "ifeval/ifeval.yaml",
+    "mmlu": "mmlu/default/_default_template_yaml",
 }
 
 _HUMANEVAL_UTILS = "humaneval/utils.py"
 # 附加到 humaneval/utils.py 的 chat 版 build_predictions 标记（幂等判据）。
 _HUMANEVAL_MARKER = "# auto chat-template patch: build_predictions_chat"
+# ifeval 任务模板同目录下的 utils.py（process_results 所在）。
+_IFEVAL_UTILS = "ifeval/utils.py"
+_IFEVAL_MARKER = "# auto chat-template patch: ifeval strip think block"
+# MMLU 生成式改写：lm-eval 默认模板 doing multiple_choice/loglikelihood，
+# chat 模型下在 assistant 标记后接裸选项字母算续写概率，首 token 分布被思考/
+# 填充占满，系统性失真。改写为 generate_until 让模型生成自然答案，再用正则
+# 抽出 A-D 字母经 exact_match 判分。57 个子任务都 include 这份共享模板。
+_MMLU_DEFAULT_TPL = "mmlu/default/_default_template_yaml"
+_MMLU_MARKER = "# auto chat-template patch: mmlu generative"
+# config 未设 max_gen_toks 时 MMLU 生成回落的默认值（长思考+答案）。
+_DEFAULT_MC_GEN_TOKS = 16384
+# __MAX_TOKS__ / __EOS__ 用替换填充，jinja 花括号保持字面量。
+_MMLU_GEN_YAML = f'''{_MMLU_MARKER}
+dataset_path: cais/mmlu
+test_split: test
+fewshot_split: dev
+fewshot_config:
+  sampler: first_n
+output_type: generate_until
+doc_to_text: "{{{{question.strip()}}}}\\nA. {{{{choices[0]}}}}\\nB. {{{{choices[1]}}}}\\nC. {{{{choices[2]}}}}\\nD. {{{{choices[3]}}}}\\nAnswer:"
+doc_to_target: "{{{{ ['A', 'B', 'C', 'D'][answer] }}}}"
+target_delimiter: ""
+metric_list:
+  - metric: exact_match
+    aggregation: mean
+    higher_is_better: true
+    ignore_case: true
+generation_kwargs:
+  max_gen_toks: __MAX_TOKS__
+  until:
+    - "__EOS__"
+  do_sample: false
+  temperature: 0.0
+filter_list:
+  - name: "mmlu-answer"
+    filter:
+      - function: "regex"
+        regex_pattern: "(?i)\\\\b([a-d])\\\\b"
+      - function: "take_first"
+metadata:
+  version: 1.0
+'''
+
 # 默认 chat EOS（Qwen3 系；非 Qwen 时可在调用处覆盖）。
 _DEFAULT_CHAT_EOS = "<|im_end|>"
 
@@ -78,6 +127,73 @@ def build_predictions_chat(resps, docs):
 
     return [[doc["prompt"] + _clean(r) for r in resp] for resp, doc in zip(resps, docs)]
 '''
+
+# 附加到 ifeval/utils.py 的独立函数源码 + process_results 改造：IFEval 的
+# 校验器把整条生成串当正文去检查指令（词数/段落/起始/JSON 等），chat 模型
+# 的思考块会污染这些判定，故在送校验前先剥掉  thinking...response 与 EOS。
+_IFEVAL_UTILS_ADDON = f'''{_IFEVAL_MARKER}
+import re as _ifeval_re
+
+
+def _strip_chat_think(text):
+    """去除 chat 思考块 ( thinking...response ) 与末尾 EOS 标记。
+
+    保留正文(含 markdown 与指令要求的原文)，仅移除前置推理与 token 结尾，
+    避免 IFEval 的词数/段落/起始/JSON 等指令误判思考块。
+    """
+    text = _ifeval_re.sub(r" thinking.*? response", "", text, flags=_ifeval_re.DOTALL)
+    text = text.replace("<|im_end|>", "").replace("</s>", "")
+    return text.strip()
+'''
+
+_PROCESS_RESULTS_ASSIGN = "    response = results[0]\n"
+
+
+def _patch_ifeval_utils(utils_path: Path) -> list[str]:
+    """给 ifeval/utils.py 注入 _strip_chat_think 并在 process_results 调用。幂等。"""
+    if not utils_path.is_file():
+        return ["[chat-patch] WARNING: 未找到 ifeval/utils.py, 跳过"]
+    text = utils_path.read_text(encoding="utf-8")
+    if _IFEVAL_MARKER in text:
+        return ["[chat-patch] ifeval/utils.py: 已 patch (幂等)"]
+    if _PROCESS_RESULTS_ASSIGN not in text:
+        return ["[chat-patch] WARNING: ifeval/utils.py 结构不符, 跳过"]
+    text = text.replace(
+        _PROCESS_RESULTS_ASSIGN,
+        "    response = _strip_chat_think(results[0])\n",
+    )
+    # addon 定义放在文件顶部(紧跟在 import 之后的模块级)，确保可用。
+    addon = "\n" + _IFEVAL_UTILS_ADDON
+    utils_path.write_text(text + addon, encoding="utf-8")
+    return ["[chat-patch] ifeval/utils.py: 注入 _strip_chat_think"]
+
+
+def _patch_mmlu_default(
+    path: Path, eos: str, max_gen_toks: int | None
+) -> list[str]:
+    """把 mmlu 默认模板改写为生成式+解析字母判分。幂等。
+
+    原模板是 ``output_type: multiple_choice`` 的对数似然打分：context 以
+    chat assistant 标记结尾、continuation 为裸选项字母，chat 模型在该位置的
+    首 token 分布被思考/填充占满，续写概率不反映真实选择。改写为
+    ``generate_until`` 让模型生成自然答案，再用正则抽出 A-D 字母经
+    ``exact_match`` 判分。57 个子任务都 include 这份共享模板，改一次全覆盖。
+    """
+    if not path.is_file():
+        return [
+            "[chat-patch] WARNING: 未找到 mmlu/default/_default_template_yaml, "
+            "跳过"
+        ]
+    text = path.read_text(encoding="utf-8")
+    if _MMLU_MARKER in text:
+        return ["[chat-patch] mmlu/default/_default_template_yaml: 已 patch (幂等)"]
+    toks = max_gen_toks or _DEFAULT_MC_GEN_TOKS
+    gen = _MMLU_GEN_YAML.replace("__MAX_TOKS__", str(toks)).replace("__EOS__", eos)
+    path.write_text(gen, encoding="utf-8")
+    return [
+        "[chat-patch] mmlu/default/_default_template_yaml: 改写为生成式+解析"
+        f" (max_gen_toks={toks}, until={[eos]}, filter=mmlu-answer)"
+    ]
 
 
 def find_lm_eval_tasks_dir(harness_cmd: str) -> Path | None:
@@ -140,9 +256,15 @@ def patch_task_templates_for_chat(
                 f"[chat-patch] WARNING: 未找到 lm_eval/tasks/{rel}, 跳过"
             )
             continue
+        if task == "mmlu":
+            # 生成式改写（native loglikelihood 对 chat 模型系统性失真）。
+            logs.extend(_patch_mmlu_default(target, eos, max_gen_toks))
+            continue
         logs.extend(_patch_yaml(target, max_gen_toks, eos, rel))
         if task == "humaneval":
             logs.extend(_patch_humaneval_utils(root / _HUMANEVAL_UTILS))
+        elif task == "ifeval":
+            logs.extend(_patch_ifeval_utils(root / _IFEVAL_UTILS))
     return logs
 
 

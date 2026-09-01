@@ -10,6 +10,9 @@ patch logic is verified against the real shapes: block-style ``until`` lists,
 from __future__ import annotations
 
 import ast
+import re
+
+import yaml
 
 from benchmark_diagnosis.config import load_config
 from benchmark_diagnosis.evaluation_orchestration.chat_template_patch import (
@@ -99,14 +102,51 @@ def build_predictions(resps, docs):
     return [[doc["prompt"] + r for r in resp] for resp, doc in zip(resps, docs)]
 """
 
+MMLU_DEFAULT = """dataset_path: cais/mmlu
+test_split: test
+fewshot_split: dev
+fewshot_config:
+  sampler: first_n
+output_type: multiple_choice
+doc_to_text: "{{question.strip()}}\\nA. {{choices[0]}}\\nB. {{choices[1]}}\\nC. {{choices[2]}}\\nD. {{choices[3]}}\\nAnswer:"
+doc_to_choice: ["A", "B", "C", "D"]
+doc_to_target: answer
+metric_list:
+  - metric: acc
+    aggregation: mean
+    higher_is_better: true
+metadata:
+  version: 1.0
+"""
 
-def _write_tasks_dir(tmp_path, *, humaneval=True, ifeval=True, bbh=True):
+IFEVAL_UTILS = """from typing import Dict, Optional, Union
+
+from lm_eval.tasks.ifeval import instructions_registry
+
+
+def process_results(doc, results):
+    inp = InputExample(
+        key=doc["key"],
+        instruction_id_list=doc["instruction_id_list"],
+        prompt=doc["prompt"],
+        kwargs=doc["kwargs"],
+    )
+    response = results[0]
+    return test_instruction_following(inp, response)
+"""
+
+
+def _write_tasks_dir(tmp_path, *, humaneval=True, ifeval=True, bbh=True, mmlu=True):
     """Replicate ``lm_eval/tasks`` for the registered templates + utils."""
     tasks = tmp_path / "lm_eval" / "tasks"
     if bbh:
         p = tasks / "bbh" / "cot_fewshot" / "_cot_fewshot_template_yaml"
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(BBH_TEMPLATE, encoding="utf-8")
+    if mmlu:
+        p = tasks / "mmlu" / "default" / "_default_template_yaml"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(MMLU_DEFAULT, encoding="utf-8")
     if humaneval:
         p = tasks / "humaneval" / "humaneval.yaml"
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -118,6 +158,7 @@ def _write_tasks_dir(tmp_path, *, humaneval=True, ifeval=True, bbh=True):
         p = tasks / "ifeval" / "ifeval.yaml"
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(IFEVAL_YAML, encoding="utf-8")
+        (tasks / "ifeval" / "utils.py").write_text(IFEVAL_UTILS, encoding="utf-8")
     return tasks
 
 
@@ -208,11 +249,74 @@ def test_patch_ifeval_only_retargets_max_gen_toks(tmp_path):
     assert any("max_gen_toks -> 16384" in line for line in logs)
 
 
+def test_patch_ifeval_utils_strips_think_before_verification(tmp_path):
+    tasks = _write_tasks_dir(tmp_path, bbh=False, humaneval=False)
+    logs = patch_task_templates_for_chat(tasks, ["ifeval"], max_gen_toks=16384)
+    utils = tasks / "ifeval" / "utils.py"
+    source = utils.read_text(encoding="utf-8")
+    # process_results now sanitizes before checking, and the helper is appended.
+    assert "response = _strip_chat_think(results[0])" in source
+    assert "def _strip_chat_think(text):" in source
+    assert any("_strip_chat_think" in line for line in logs)
+    # idempotent.
+    before = source
+    logs2 = patch_task_templates_for_chat(tasks, ["ifeval"], max_gen_toks=16384)
+    assert utils.read_text(encoding="utf-8") == before
+    assert any("已 patch (幂等)" in line for line in logs2)
+
+    # verify the appended helper runs and strips the think block in place.
+    tree = ast.parse(source)
+    fn = next(
+        n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_strip_chat_think"
+    )
+    ns: dict = {"_ifeval_re": __import__("re")}
+    exec(compile(ast.Module(body=[fn], type_ignores=[]), "<test>", "exec"), ns)  # noqa: S102
+    strip = ns["_strip_chat_think"]
+    raw = " thinking\nLet me reason...\n response\n\nThe text is 42 words <|im_end|>"
+    assert strip(raw) == "The text is 42 words"
+
+
 def test_patch_skips_unregistered_tasks_and_missing_files(tmp_path):
-    tasks = _write_tasks_dir(tmp_path, bbh=False, humaneval=False, ifeval=False)
-    assert patch_task_templates_for_chat(tasks, ["gsm8k", "mmlu"]) == []
+    tasks = _write_tasks_dir(tmp_path, bbh=False, humaneval=False, ifeval=False, mmlu=False)
+    assert patch_task_templates_for_chat(tasks, ["gsm8k", "mmlu_pro"]) == []
     logs = patch_task_templates_for_chat(tasks, ["bbh"], max_gen_toks=16384)
     assert len(logs) == 1 and "WARNING" in logs[0]
+
+
+def test_patch_mmlu_rewrites_to_generative_and_extracts_letter(tmp_path):
+    tasks = _write_tasks_dir(
+        tmp_path, bbh=False, humaneval=False, ifeval=False, mmlu=True
+    )
+    target = tasks / "mmlu" / "default" / "_default_template_yaml"
+    original = target.read_text(encoding="utf-8")
+    assert "output_type: multiple_choice" in original  # fixture sanity
+
+    logs = patch_task_templates_for_chat(tasks, ["mmlu"], max_gen_toks=16384)
+    text = target.read_text(encoding="utf-8")
+    assert "output_type: generate_until" in text
+    assert 'until:\n    - "<|im_end|>"' in text
+    assert "max_gen_toks: 16384" in text
+    assert "do_sample: false" in text
+    assert "metric: exact_match" in text
+    assert "ignore_case: true" in text
+    assert 'regex_pattern: "(?i)\\\\b([a-d])\\\\b"' in text
+    assert any("生成式+解析" in line for line in logs)
+
+    # 生成的 YAML 必须可被 lm-eval 解析, 正则需命中自然答案中的字母。
+    cfg = yaml.safe_load(text)
+    assert cfg["output_type"] == "generate_until"
+    assert cfg["generation_kwargs"]["until"] == ["<|im_end|>"]
+    rx = cfg["filter_list"][0]["filter"][0]["regex_pattern"]
+    assert re.fullmatch(rx, "B")  # 裸字母
+    assert re.search(rx, "The answer is C because")  # 自然句里的答案字母
+    assert not re.search(rx, "Paris, 1919")  # 无 A-D 字母时不误抽取
+    assert "['A', 'B', 'C', 'D'][answer]" in cfg["doc_to_target"]
+
+    # idempotent: second run rewrites nothing and reports it.
+    before = text
+    logs2 = patch_task_templates_for_chat(tasks, ["mmlu"], max_gen_toks=16384)
+    assert target.read_text(encoding="utf-8") == before
+    assert any("已 patch (幂等)" in line for line in logs2)
 
 
 def test_prepare_chat_template_eval_gating(tmp_path):
